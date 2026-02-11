@@ -2,98 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
-    --foreground: 220 25% 10%;
+    --background: 245 15% 96%;
+    --foreground: 240 20% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 10%;
+    --card-foreground: 240 20% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 10%;
+    --popover-foreground: 240 20% 12%;
 
-    --primary: 220 70% 50%;
+    --primary: 250 80% 60%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 15% 92%;
-    --secondary-foreground: 220 25% 20%;
+    --secondary: 200 70% 50%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 220 15% 94%;
-    --muted-foreground: 220 10% 50%;
+    --muted: 240 10% 90%;
+    --muted-foreground: 240 8% 46%;
 
-    --accent: 160 60% 45%;
+    --accent: 340 75% 55%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 88%;
-    --input: 220 15% 88%;
-    --ring: 220 70% 50%;
+    --border: 240 12% 87%;
+    --input: 240 12% 87%;
+    --ring: 250 80% 60%;
 
-    --radius: 0.625rem;
+    --radius: 0.75rem;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-primary: 250 80% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-border: 240 13% 91%;
+    --sidebar-ring: 250 80% 60%;
 
     /* Kanban specific tokens */
-    --kanban-bg: 220 20% 95%;
+    --kanban-bg: 245 15% 94%;
     --kanban-column: 0 0% 100%;
-    --kanban-column-header: 220 20% 97%;
-    --kanban-card-hover: 220 30% 96%;
-    --kanban-drag-over: 220 70% 95%;
-    --kanban-topbar: 220 25% 12%;
-    --kanban-topbar-foreground: 220 15% 92%;
-    --kanban-badge: 220 70% 50%;
+    --kanban-column-header: 245 15% 97%;
+    --kanban-card-hover: 250 20% 96%;
+    --kanban-drag-over: 250 60% 95%;
+    --kanban-topbar: 250 50% 25%;
+    --kanban-topbar-foreground: 245 15% 95%;
+    --kanban-badge: 250 80% 60%;
     --kanban-badge-foreground: 0 0% 100%;
+
+    /* Extra palette tokens */
+    --gradient-start: 250 80% 60%;
+    --gradient-end: 200 70% 50%;
+    --success: 160 65% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 90% 55%;
+    --warning-foreground: 0 0% 10%;
   }
 
   .dark {
-    --background: 220 25% 8%;
-    --foreground: 220 15% 92%;
-    --card: 220 25% 12%;
-    --card-foreground: 220 15% 92%;
-    --popover: 220 25% 12%;
-    --popover-foreground: 220 15% 92%;
-    --primary: 220 70% 55%;
+    --background: 240 20% 7%;
+    --foreground: 240 10% 92%;
+    --card: 240 20% 11%;
+    --card-foreground: 240 10% 92%;
+    --popover: 240 20% 11%;
+    --popover-foreground: 240 10% 92%;
+    --primary: 250 75% 65%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 20% 18%;
-    --secondary-foreground: 220 15% 85%;
-    --muted: 220 20% 16%;
-    --muted-foreground: 220 10% 55%;
-    --accent: 160 60% 45%;
+    --secondary: 200 65% 55%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 15% 16%;
+    --muted-foreground: 240 8% 55%;
+    --accent: 340 70% 58%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 220 20% 20%;
-    --input: 220 20% 20%;
-    --ring: 220 70% 55%;
-    --sidebar-background: 240 5.9% 10%;
+    --border: 240 15% 20%;
+    --input: 240 15% 20%;
+    --ring: 250 75% 65%;
+    --sidebar-background: 240 20% 9%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary: 250 75% 65%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-    --kanban-bg: 220 25% 10%;
-    --kanban-column: 220 25% 14%;
-    --kanban-column-header: 220 25% 16%;
-    --kanban-card-hover: 220 25% 18%;
-    --kanban-drag-over: 220 40% 20%;
-    --kanban-topbar: 220 30% 6%;
-    --kanban-topbar-foreground: 220 15% 90%;
-    --kanban-badge: 220 70% 55%;
+    --sidebar-ring: 250 75% 65%;
+    --kanban-bg: 240 20% 9%;
+    --kanban-column: 240 20% 13%;
+    --kanban-column-header: 240 20% 15%;
+    --kanban-card-hover: 240 20% 17%;
+    --kanban-drag-over: 250 35% 20%;
+    --kanban-topbar: 250 40% 12%;
+    --kanban-topbar-foreground: 240 10% 90%;
+    --kanban-badge: 250 75% 65%;
     --kanban-badge-foreground: 0 0% 100%;
+    --gradient-start: 250 75% 65%;
+    --gradient-end: 200 65% 55%;
+    --success: 160 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 85% 55%;
+    --warning-foreground: 0 0% 10%;
   }
 }
 
@@ -104,7 +118,7 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   }
 }
 

@@ -39,13 +39,13 @@ const Cadastro = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm">
+    <div className="flex min-h-screen items-center justify-center px-4" style={{ background: 'linear-gradient(135deg, hsl(var(--gradient-start)) 0%, hsl(var(--gradient-end)) 100%)' }}>
+      <div className="w-full max-w-sm rounded-2xl border border-border/50 bg-card p-8 shadow-2xl backdrop-blur-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-            <UserPlus className="h-6 w-6 text-primary-foreground" />
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/30">
+            <UserPlus className="h-7 w-7 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Criar conta</h1>
+          <h1 className="text-2xl font-extrabold text-card-foreground">Criar conta</h1>
           <p className="mt-1 text-sm text-muted-foreground">Comece a organizar suas tarefas</p>
         </div>
 
@@ -59,6 +59,7 @@ const Cadastro = () => {
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
+              className="bg-background/60"
             />
           </div>
 
@@ -71,6 +72,7 @@ const Cadastro = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              className="bg-background/60"
             />
           </div>
 
@@ -83,19 +85,20 @@ const Cadastro = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
+              className="bg-background/60"
             />
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full font-semibold shadow-md shadow-primary/25">
             Cadastrar
           </Button>
         </form>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Já tem conta?{" "}
-          <Link to="/login" className="font-medium text-primary hover:underline">
+          <Link to="/login" className="font-semibold text-primary hover:underline">
             Entrar
           </Link>
         </p>
