@@ -14,18 +14,18 @@ export function KanbanCard({ task, columnId, onRemove, onDragStart }: KanbanCard
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task.id, columnId)}
-      className="group flex cursor-grab items-start gap-2 rounded-lg border border-border bg-card p-3 shadow-sm transition-colors hover:bg-kanban-card-hover active:cursor-grabbing"
+      className="group flex cursor-grab items-start gap-2 rounded-xl border border-border/60 bg-card p-3.5 shadow-sm transition-all hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 active:cursor-grabbing"
     >
       <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-card-foreground">{task.title}</p>
+        <p className="text-sm font-semibold text-card-foreground">{task.title}</p>
         {task.description && (
           <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{task.description}</p>
         )}
       </div>
       <button
         onClick={() => onRemove(task.id)}
-        className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+        className="shrink-0 rounded-lg p-1 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
         title="Remover tarefa"
       >
         <X className="h-3.5 w-3.5" />
@@ -72,8 +72,8 @@ export function KanbanColumn({
 
   return (
     <div
-      className={`flex w-72 shrink-0 flex-col rounded-xl border border-border transition-colors ${
-        dragOver ? "bg-kanban-drag-over" : "bg-kanban-column"
+      className={`flex w-72 shrink-0 flex-col rounded-2xl border transition-all ${
+        dragOver ? "border-primary/40 bg-kanban-drag-over shadow-lg shadow-primary/10" : "border-border/60 bg-kanban-column shadow-sm"
       }`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -87,11 +87,11 @@ export function KanbanColumn({
       }}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 rounded-t-xl bg-kanban-column-header px-3 py-2.5">
+      <div className="flex items-center gap-2 rounded-t-2xl bg-kanban-column-header px-3.5 py-3">
         {editing ? (
           <input
             ref={inputRef}
-            className="flex-1 rounded bg-background px-2 py-0.5 text-sm font-semibold text-foreground outline-none ring-1 ring-ring"
+            className="flex-1 rounded-lg bg-background px-2 py-0.5 text-sm font-semibold text-foreground outline-none ring-2 ring-primary"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={commitRename}

@@ -98,23 +98,24 @@ const Kanban = () => {
   return (
     <div className="flex h-screen flex-col bg-kanban-bg">
       {/* Top bar */}
-      <header className="flex items-center justify-between gap-4 bg-kanban-topbar px-4 py-3 shadow-sm">
+      <header className="flex items-center justify-between gap-4 px-5 py-3.5 shadow-lg" style={{ background: 'linear-gradient(135deg, hsl(var(--gradient-start)) 0%, hsl(var(--gradient-end)) 100%)' }}>
         <div className="flex items-center gap-3">
-          <LayoutDashboard className="h-5 w-5 text-kanban-topbar-foreground" />
-          <h1 className="text-lg font-bold text-kanban-topbar-foreground">Meu Kanban</h1>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
+            <LayoutDashboard className="h-4.5 w-4.5 text-white" />
+          </div>
+          <h1 className="text-lg font-extrabold text-white tracking-tight">Meu Kanban</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            variant="secondary"
             onClick={() => setColDialogOpen(true)}
+            className="bg-white/20 text-white hover:bg-white/30 border-0 font-semibold"
           >
             <Plus className="mr-1 h-4 w-4" />
             Nova coluna
           </Button>
           <Button
             size="sm"
-            variant="secondary"
             onClick={() => {
               if (board.columns.length === 0) {
                 alert("Crie uma coluna antes de adicionar tarefas.");
@@ -123,11 +124,12 @@ const Kanban = () => {
               setNewTaskColId(board.columns[0].id);
               setTaskDialogOpen(true);
             }}
+            className="bg-white/20 text-white hover:bg-white/30 border-0 font-semibold"
           >
             <Plus className="mr-1 h-4 w-4" />
             Nova tarefa
           </Button>
-          <Button size="sm" variant="ghost" onClick={handleLogout} className="text-kanban-topbar-foreground hover:bg-muted/20">
+          <Button size="sm" variant="ghost" onClick={handleLogout} className="text-white/80 hover:text-white hover:bg-white/15">
             <LogOut className="mr-1 h-4 w-4" />
             Sair
           </Button>
