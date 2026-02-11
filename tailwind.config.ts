@@ -57,6 +57,17 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        kanban: {
+          bg: "hsl(var(--kanban-bg))",
+          column: "hsl(var(--kanban-column))",
+          "column-header": "hsl(var(--kanban-column-header))",
+          "card-hover": "hsl(var(--kanban-card-hover))",
+          "drag-over": "hsl(var(--kanban-drag-over))",
+          topbar: "hsl(var(--kanban-topbar))",
+          "topbar-foreground": "hsl(var(--kanban-topbar-foreground))",
+          badge: "hsl(var(--kanban-badge))",
+          "badge-foreground": "hsl(var(--kanban-badge-foreground))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
