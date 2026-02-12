@@ -138,7 +138,7 @@ const Kanban = () => {
 
       {/* Board */}
       <main className="flex flex-1 gap-4 overflow-x-auto p-4 kanban-scrollbar">
-        {board.columns.map((col) => {
+        {board.columns.map((col, idx) => {
           const tasks = col.taskIds
             .map((id) => board.tasks.find((t) => t.id === id))
             .filter(Boolean) as import("@/lib/mock-storage").Task[];
@@ -147,6 +147,7 @@ const Kanban = () => {
               key={col.id}
               column={col}
               tasks={tasks}
+              colorIndex={idx}
               onRename={(colId, title) => setBoard(renameColumn(board, colId, title))}
               onRemoveColumn={(colId) => setBoard(removeColumn(board, colId))}
               onRemoveTask={(taskId) => setBoard(removeTask(board, taskId))}
