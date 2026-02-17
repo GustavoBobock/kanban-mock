@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -12,10 +12,12 @@ import {
   type Board,
 } from "@/lib/mock-storage";
 import { KanbanColumn } from "@/components/KanbanColumn";
+import { ListView } from "@/components/ListView";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogOut, Plus, LayoutDashboard } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -32,10 +34,21 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+type ViewMode = "kanban" | "list";
+
 const Kanban = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [board, setBoard] = useState<Board>(() => getUserBoard(user!.id));
+  const viewModeStorageKey = `kanban_view_mode:${user!.id}`;
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const raw = localStorage.getItem(viewModeStorageKey);
+    return raw === "list" || raw === "kanban" ? raw : "kanban";
+  });
+
+  useEffect(() => {
+    localStorage.setItem(viewModeStorageKey, viewMode);
+  }, [viewMode, viewModeStorageKey]);
 
   // New column dialog
   const [colDialogOpen, setColDialogOpen] = useState(false);
@@ -95,17 +108,62 @@ const Kanban = () => {
     [dragData, board]
   );
 
+  const handleMoveTaskFromList = useCallback(
+    (taskId: string, fromColId: string, toColId: string) => {
+      const toCol = board.columns.find((c) => c.id === toColId);
+      const toIndex = toCol ? toCol.taskIds.length : 0;
+      setBoard(moveTask(board, taskId, fromColId, toColId, toIndex));
+    },
+    [board]
+  );
+
   return (
     <div className="flex h-screen flex-col bg-kanban-bg">
       {/* Top bar */}
-      <header className="flex items-center justify-between gap-4 px-5 py-3.5 shadow-lg" style={{ background: 'linear-gradient(135deg, hsl(var(--gradient-start)) 0%, hsl(var(--gradient-end)) 100%)' }}>
+      <header
+        className="flex items-center justify-between gap-4 px-5 py-3.5 shadow-lg"
+        style={{ background: "linear-gradient(135deg, hsl(var(--gradient-start)) 0%, hsl(var(--gradient-end)) 100%)" }}
+      >
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
             <LayoutDashboard className="h-4.5 w-4.5 text-white" />
           </div>
-          <h1 className="text-lg font-extrabold text-white tracking-tight">Meu Kanban</h1>
+          <div className="flex flex-col leading-tight">
+            <h1 className="text-lg font-extrabold text-white tracking-tight">Meu Kanban</h1>
+            {user && (
+              <p
+                className="mt-0.5 text-xs font-medium text-white/90"
+                title={`Logado como ${user.name} (${user.email})`}
+                aria-label="Informações do usuário logado"
+              >
+                {user.name}
+                <span className="hidden sm:inline text-white/70"> · {user.email}</span>
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(v) => v && setViewMode(v as ViewMode)}
+            className="mr-1 rounded-md bg-white/15 p-1"
+          >
+            <ToggleGroupItem
+              value="kanban"
+              aria-label="Modo Kanban"
+              className="text-white data-[state=on]:bg-white/25 data-[state=on]:text-white"
+            >
+              Kanban
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="list"
+              aria-label="Modo Lista"
+              className="text-white data-[state=on]:bg-white/25 data-[state=on]:text-white"
+            >
+              Lista
+            </ToggleGroupItem>
+          </ToggleGroup>
           <Button
             size="sm"
             onClick={() => setColDialogOpen(true)}
@@ -137,33 +195,43 @@ const Kanban = () => {
       </header>
 
       {/* Board */}
-      <main className="flex flex-1 gap-4 overflow-x-auto p-4 kanban-scrollbar">
-        {board.columns.map((col, idx) => {
-          const tasks = col.taskIds
-            .map((id) => board.tasks.find((t) => t.id === id))
-            .filter(Boolean) as import("@/lib/mock-storage").Task[];
-          return (
-            <KanbanColumn
-              key={col.id}
-              column={col}
-              tasks={tasks}
-              colorIndex={idx}
-              onRename={(colId, title) => setBoard(renameColumn(board, colId, title))}
-              onRemoveColumn={(colId) => setBoard(removeColumn(board, colId))}
-              onRemoveTask={(taskId) => setBoard(removeTask(board, taskId))}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-            />
-          );
-        })}
+      {viewMode === "kanban" ? (
+        <main className="flex flex-1 gap-4 overflow-x-auto p-4 kanban-scrollbar">
+          {board.columns.map((col, idx) => {
+            const tasks = col.taskIds
+              .map((id) => board.tasks.find((t) => t.id === id))
+              .filter(Boolean) as import("@/lib/mock-storage").Task[];
+            return (
+              <KanbanColumn
+                key={col.id}
+                column={col}
+                tasks={tasks}
+                colorIndex={idx}
+                onRename={(colId, title) => setBoard(renameColumn(board, colId, title))}
+                onRemoveColumn={(colId) => setBoard(removeColumn(board, colId))}
+                onRemoveTask={(taskId) => setBoard(removeTask(board, taskId))}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              />
+            );
+          })}
 
-        {board.columns.length === 0 && (
-          <div className="flex flex-1 items-center justify-center">
-            <p className="text-muted-foreground">Nenhuma coluna ainda. Clique em "Nova coluna" para começar.</p>
-          </div>
-        )}
-      </main>
+          {board.columns.length === 0 && (
+            <div className="flex flex-1 items-center justify-center">
+              <p className="text-muted-foreground">Nenhuma coluna ainda. Clique em "Nova coluna" para começar.</p>
+            </div>
+          )}
+        </main>
+      ) : (
+        <main className="flex flex-1 overflow-y-auto p-4 kanban-scrollbar">
+          <ListView
+            board={board}
+            onRemoveTask={(taskId) => setBoard(removeTask(board, taskId))}
+            onMoveTask={handleMoveTaskFromList}
+          />
+        </main>
+      )}
 
       {/* New column dialog */}
       <Dialog open={colDialogOpen} onOpenChange={setColDialogOpen}>
