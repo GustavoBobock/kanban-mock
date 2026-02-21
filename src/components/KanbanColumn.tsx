@@ -100,8 +100,8 @@ export function KanbanCard({ task, columnId, accentColor, columnTitle, onRemove,
 
             {task.priority && task.priority !== "Urgente" && (
               <span className={`text-[10px] font-extrabold px-1.5 rounded-full ${task.priority === "Alta" ? "bg-orange-100 text-orange-700" :
-                  task.priority === "Média" ? "bg-blue-100 text-blue-700" :
-                    "bg-slate-100 text-slate-600"
+                task.priority === "Média" ? "bg-blue-100 text-blue-700" :
+                  "bg-slate-100 text-slate-600"
                 }`}>
                 {task.priority}
               </span>
@@ -150,6 +150,7 @@ interface KanbanColumnProps {
   onDragStart: (e: React.DragEvent, taskId: string, columnId: string) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, columnId: string) => void;
+  onColumnDragStart: (e: React.DragEvent, columnId: string) => void;
 }
 
 export function KanbanColumn({
@@ -162,6 +163,7 @@ export function KanbanColumn({
   onDragStart,
   onDragOver,
   onDrop,
+  onColumnDragStart,
 }: KanbanColumnProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(column.title);
@@ -184,6 +186,8 @@ export function KanbanColumn({
   return (
     <>
       <div
+        draggable
+        onDragStart={(e) => onColumnDragStart(e, column.id)}
         className={`flex w-72 shrink-0 flex-col rounded-2xl border-2 transition-all ${dragOver ? "scale-[1.01] shadow-lg" : "shadow-sm"
           }`}
         style={{
@@ -224,12 +228,12 @@ export function KanbanColumn({
             />
           ) : (
             <button
-              className="flex-1 truncate text-left text-sm font-semibold text-foreground hover:text-primary transition-colors"
-              onClick={() => {
+              className="flex-1 truncate text-left text-sm font-semibold text-foreground hover:text-primary transition-colors cursor-text"
+              onDoubleClick={() => {
                 setEditing(true);
                 setTimeout(() => inputRef.current?.select(), 0);
               }}
-              title="Clique para editar"
+              title="Dê um duplo clique para editar"
             >
               {column.title}
             </button>

@@ -8,7 +8,7 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Plus, LayoutDashboard, Loader2, AlertCircle, Clock, CheckCircle2, Filter, Search, Users, Wand2, Calendar as CalendarIcon } from "lucide-react";
+import { LogOut, Plus, LayoutDashboard, Loader2, AlertCircle, Clock, CheckCircle2, Filter, Search, Users, Wand2, Calendar as CalendarIcon, X } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { format, isBefore, isAfter, addDays, startOfDay, parseISO, setDate } from "date-fns";
@@ -48,7 +48,32 @@ const Kanban = () => {
     try {
       setLoading(true);
       const data = await api.getBoard(user.id);
-      setBoard(data);
+
+      // Migration of legacy columns
+      let columns = data?.columns || [];
+      let tasks = data?.tasks || [];
+      let updated = false;
+
+      const migrationMap: Record<string, string> = {
+        "Em Progresso": "Em Andamento",
+        "Feito": "Entregue"
+      };
+
+      for (const col of columns) {
+        if (migrationMap[col.title]) {
+          const newTitle = migrationMap[col.title];
+          await api.updateColumn(col.id, { title: newTitle });
+          col.title = newTitle;
+          updated = true;
+        }
+      }
+
+      if (updated) {
+        // Fetch again to get updated state if needed, or just update local
+        setBoard({ ...data!, columns });
+      } else {
+        setBoard(data);
+      }
     } catch (error) {
       console.error("Error fetching board:", error);
       toast.error("Erro ao carregar o quadro.");
@@ -98,20 +123,27 @@ const Kanban = () => {
 
   // Drag state
   const [dragData, setDragData] = useState<{ taskId: string; fromColId: string } | null>(null);
+  const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
+
+  const [isAddingColumn, setIsAddingColumn] = useState(false);
+  const [inlineColTitle, setInlineColTitle] = useState("");
 
   const handleLogout = async () => {
     await signOut();
     navigate("/login", { replace: true });
   };
 
-  const handleAddColumn = async () => {
-    if (!newColTitle.trim() || !board) return;
+  const handleAddColumn = async (title?: string) => {
+    const finalTitle = title || newColTitle;
+    if (!finalTitle.trim() || !board) return;
     try {
       const position = board.columns.length;
-      await api.addColumn(board.id, newColTitle.trim(), position);
+      await api.addColumn(board.id, finalTitle.trim(), position);
       setNewColTitle("");
+      setInlineColTitle("");
       setColDialogOpen(false);
-      fetchBoard(); // Refresh board
+      setIsAddingColumn(false);
+      fetchBoard();
       toast.success("Coluna criada!");
     } catch (error) {
       toast.error("Erro ao criar coluna.");
@@ -260,6 +292,12 @@ const Kanban = () => {
     e.dataTransfer.effectAllowed = "move";
   }, []);
 
+  const handleColumnDragStart = (e: React.DragEvent, columnId: string) => {
+    setDraggedColumnId(columnId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("columnId", columnId);
+  };
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -268,6 +306,31 @@ const Kanban = () => {
   const handleDrop = useCallback(
     async (e: React.DragEvent, toColId: string) => {
       e.preventDefault();
+
+      const draggedColId = e.dataTransfer.getData("columnId");
+      if (draggedColId) {
+        if (draggedColId === toColId || !board) return;
+
+        const newColumns = [...board.columns];
+        const fromIndex = newColumns.findIndex(c => c.id === draggedColId);
+        const toIndex = newColumns.findIndex(c => c.id === toColId);
+
+        const [movedCol] = newColumns.splice(fromIndex, 1);
+        newColumns.splice(toIndex, 0, movedCol);
+
+        // Update positions in DB
+        try {
+          await Promise.all(newColumns.map((col, idx) =>
+            api.updateColumn(col.id, { position: idx })
+          ));
+          fetchBoard();
+        } catch (error) {
+          toast.error("Erro ao reordenar colunas.");
+        }
+        setDraggedColumnId(null);
+        return;
+      }
+
       if (!dragData || !board) return;
       const { taskId, fromColId } = dragData;
 
@@ -534,11 +597,47 @@ const Kanban = () => {
                   onDragStart={handleDragStart}
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
+                  onColumnDragStart={handleColumnDragStart}
                 />
               );
             })}
 
-            {filteredBoard.columns.length === 0 && (
+            {/* Add Column Inline */}
+            <div className="w-72 shrink-0">
+              {isAddingColumn ? (
+                <div className="rounded-2xl border-2 border-dashed border-primary/40 bg-white/50 p-4 shadow-sm">
+                  <Input
+                    placeholder="Nome da coluna..."
+                    value={inlineColTitle}
+                    onChange={(e) => setInlineColTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddColumn(inlineColTitle);
+                      if (e.key === "Escape") setIsAddingColumn(false);
+                    }}
+                    autoFocus
+                    className="mb-2 h-9 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => handleAddColumn(inlineColTitle)} className="h-8 flex-1">
+                      <CheckCircle2 className="mr-1 h-4 w-4" /> Adicionar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setIsAddingColumn(false)} className="h-8 w-8 p-0">
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAddingColumn(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 py-4 text-slate-500 transition-all hover:border-primary hover:bg-primary/5 hover:text-primary"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span className="font-bold">Nova Coluna</span>
+                </button>
+              )}
+            </div>
+
+            {filteredBoard.columns.length === 0 && !isAddingColumn && (
               <div className="flex flex-1 items-center justify-center">
                 <p className="text-muted-foreground">Nenhuma coluna ainda. Clique em "Nova coluna" para começar.</p>
               </div>
