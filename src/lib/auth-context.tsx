@@ -1,34 +1,59 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getCurrentUser, clearSession, type User } from "./mock-storage";
+import { User, Session } from "@supabase/supabase-js";
+import { supabase } from "./supabaseClient";
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   loading: boolean;
-  refresh: () => void;
-  logout: () => void;
+  signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, loading: true, refresh: () => {}, logout: () => {} });
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  session: null,
+  loading: true,
+  signOut: async () => { },
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(() => {
-    setUser(getCurrentUser());
-    setLoading(false);
-  }, []);
-
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    // Check active sessions and sets the user
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log("AuthContext: getSession", session);
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    };
 
-  const logout = useCallback(() => {
-    clearSession();
-    setUser(null);
+    getSession();
+
+    // Listen for changes on auth state (logged in, signed out, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("AuthContext: onAuthStateChange", _event, session);
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  return <AuthContext.Provider value={{ user, loading, refresh, logout }}>{children}</AuthContext.Provider>;
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, session, loading, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

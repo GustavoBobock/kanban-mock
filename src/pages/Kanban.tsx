@@ -1,22 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
-import {
-  getUserBoard,
-  addColumn,
-  removeColumn,
-  renameColumn,
-  addTask,
-  removeTask,
-  moveTask,
-  type Board,
-} from "@/lib/mock-storage";
+import { api, type Board, type Column, type Task } from "@/lib/api";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { ListView } from "@/components/ListView";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Plus, LayoutDashboard } from "lucide-react";
+import { LogOut, Plus, LayoutDashboard, Loader2 } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
@@ -33,18 +24,38 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 type ViewMode = "kanban" | "list";
 
 const Kanban = () => {
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const [board, setBoard] = useState<Board>(() => getUserBoard(user!.id));
-  const viewModeStorageKey = `kanban_view_mode:${user!.id}`;
+  const [board, setBoard] = useState<Board | null>(null);
+  const [loading, setLoading] = useState(true);
+  const viewModeStorageKey = `kanban_view_mode:${user?.id}`;
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const raw = localStorage.getItem(viewModeStorageKey);
     return raw === "list" || raw === "kanban" ? raw : "kanban";
   });
+
+  const fetchBoard = useCallback(async () => {
+    if (!user) return;
+    try {
+      setLoading(true);
+      const data = await api.getBoard(user.id);
+      setBoard(data);
+    } catch (error) {
+      console.error("Error fetching board:", error);
+      toast.error("Erro ao carregar o quadro.");
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchBoard();
+  }, [fetchBoard]);
 
   useEffect(() => {
     localStorage.setItem(viewModeStorageKey, viewMode);
@@ -63,25 +74,71 @@ const Kanban = () => {
   // Drag state
   const [dragData, setDragData] = useState<{ taskId: string; fromColId: string } | null>(null);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await signOut();
     navigate("/login", { replace: true });
   };
 
-  const handleAddColumn = () => {
-    if (!newColTitle.trim()) return;
-    setBoard(addColumn(board, newColTitle.trim()));
-    setNewColTitle("");
-    setColDialogOpen(false);
+  const handleAddColumn = async () => {
+    if (!newColTitle.trim() || !board) return;
+    try {
+      const position = board.columns.length;
+      await api.addColumn(board.id, newColTitle.trim(), position);
+      setNewColTitle("");
+      setColDialogOpen(false);
+      fetchBoard(); // Refresh board
+      toast.success("Coluna criada!");
+    } catch (error) {
+      toast.error("Erro ao criar coluna.");
+    }
   };
 
-  const handleAddTask = () => {
-    if (!newTaskTitle.trim() || !newTaskColId) return;
-    setBoard(addTask(board, newTaskColId, newTaskTitle.trim(), newTaskDesc.trim() || undefined));
-    setNewTaskTitle("");
-    setNewTaskDesc("");
-    setNewTaskColId("");
-    setTaskDialogOpen(false);
+  const handleAddTask = async () => {
+    if (!newTaskTitle.trim() || !newTaskColId || !board) return;
+    try {
+      const col = board.columns.find(c => c.id === newTaskColId);
+      const position = col ? col.taskIds.length : 0;
+      await api.addTask(newTaskColId, newTaskTitle.trim(), newTaskDesc.trim() || undefined, position);
+      setNewTaskTitle("");
+      setNewTaskDesc("");
+      setNewTaskColId("");
+      setTaskDialogOpen(false);
+      fetchBoard();
+      toast.success("Tarefa criada!");
+    } catch (error) {
+      toast.error("Erro ao criar tarefa.");
+    }
+  };
+
+  const handleRemoveColumn = async (colId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta coluna e suas tarefas?")) return;
+    try {
+      await api.deleteColumn(colId);
+      fetchBoard();
+      toast.success("Coluna excluída.");
+    } catch (error) {
+      toast.error("Erro ao excluir coluna.");
+    }
+  };
+
+  const handleRenameColumn = async (colId: string, title: string) => {
+    try {
+      await api.updateColumn(colId, { title });
+      fetchBoard();
+    } catch (error) {
+      toast.error("Erro ao renomear coluna.");
+    }
+  };
+
+  const handleRemoveTask = async (taskId: string) => {
+    if (!confirm("Excluir esta tarefa?")) return;
+    try {
+      await api.deleteTask(taskId);
+      fetchBoard();
+      toast.success("Tarefa excluída.");
+    } catch (error) {
+      toast.error("Erro ao excluir tarefa.");
+    }
   };
 
   const handleDragStart = useCallback((e: React.DragEvent, taskId: string, columnId: string) => {
@@ -95,27 +152,54 @@ const Kanban = () => {
   }, []);
 
   const handleDrop = useCallback(
-    (e: React.DragEvent, toColId: string) => {
+    async (e: React.DragEvent, toColId: string) => {
       e.preventDefault();
-      if (!dragData) return;
+      if (!dragData || !board) return;
       const { taskId, fromColId } = dragData;
-      // Drop at end of column
+
+      // Optimistic update logic could go here, but for simplicity we just API call and refresh
+      // Calculate new position (append to end for now)
       const toCol = board.columns.find((c) => c.id === toColId);
-      const toIndex = toCol ? toCol.taskIds.length : 0;
-      setBoard(moveTask(board, taskId, fromColId, toColId, toIndex));
+      const newPosition = toCol ? toCol.taskIds.length : 0;
+
+      try {
+        await api.moveTask(taskId, toColId, newPosition);
+        fetchBoard();
+      } catch (error) {
+        toast.error("Erro ao mover tarefa.");
+      }
       setDragData(null);
     },
-    [dragData, board]
+    [dragData, board, fetchBoard]
   );
 
   const handleMoveTaskFromList = useCallback(
-    (taskId: string, fromColId: string, toColId: string) => {
+    async (taskId: string, fromColId: string, toColId: string) => {
+      // similar logic to drop
+      if (!board) return;
       const toCol = board.columns.find((c) => c.id === toColId);
-      const toIndex = toCol ? toCol.taskIds.length : 0;
-      setBoard(moveTask(board, taskId, fromColId, toColId, toIndex));
+      const newPosition = toCol ? toCol.taskIds.length : 0;
+      try {
+        await api.moveTask(taskId, toColId, newPosition);
+        fetchBoard();
+      } catch (error) {
+        toast.error("Erro ao mover tarefa.");
+      }
     },
-    [board]
+    [board, fetchBoard]
   );
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-kanban-bg">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!board) {
+    return <div className="flex h-screen items-center justify-center">Erro ao carregar quadro.</div>;
+  }
 
   return (
     <div className="flex h-screen flex-col bg-kanban-bg">
@@ -129,15 +213,13 @@ const Kanban = () => {
             <LayoutDashboard className="h-4.5 w-4.5 text-white" />
           </div>
           <div className="flex flex-col leading-tight">
-            <h1 className="text-lg font-extrabold text-white tracking-tight">Meu Kanban</h1>
+            <h1 className="text-lg font-extrabold text-white tracking-tight">{board.title}</h1>
             {user && (
               <p
                 className="mt-0.5 text-xs font-medium text-white/90"
-                title={`Logado como ${user.name} (${user.email})`}
-                aria-label="Informações do usuário logado"
+                title={`Logado como ${user.user_metadata?.full_name || user.email}`}
               >
-                {user.name}
-                <span className="hidden sm:inline text-white/70"> · {user.email}</span>
+                {user.user_metadata?.full_name || user.email}
               </p>
             )}
           </div>
@@ -176,7 +258,7 @@ const Kanban = () => {
             size="sm"
             onClick={() => {
               if (board.columns.length === 0) {
-                alert("Crie uma coluna antes de adicionar tarefas.");
+                toast.error("Crie uma coluna antes de adicionar tarefas.");
                 return;
               }
               setNewTaskColId(board.columns[0].id);
@@ -197,19 +279,19 @@ const Kanban = () => {
       {/* Board */}
       {viewMode === "kanban" ? (
         <main className="flex flex-1 gap-4 overflow-x-auto p-4 kanban-scrollbar">
-          {board.columns.map((col, idx) => {
+          {board?.columns.map((col, idx) => {
             const tasks = col.taskIds
               .map((id) => board.tasks.find((t) => t.id === id))
-              .filter(Boolean) as import("@/lib/mock-storage").Task[];
+              .filter(Boolean) as Task[];
             return (
               <KanbanColumn
                 key={col.id}
                 column={col}
                 tasks={tasks}
                 colorIndex={idx}
-                onRename={(colId, title) => setBoard(renameColumn(board, colId, title))}
-                onRemoveColumn={(colId) => setBoard(removeColumn(board, colId))}
-                onRemoveTask={(taskId) => setBoard(removeTask(board, taskId))}
+                onRename={handleRenameColumn}
+                onRemoveColumn={handleRemoveColumn}
+                onRemoveTask={handleRemoveTask}
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
@@ -217,7 +299,7 @@ const Kanban = () => {
             );
           })}
 
-          {board.columns.length === 0 && (
+          {board?.columns.length === 0 && (
             <div className="flex flex-1 items-center justify-center">
               <p className="text-muted-foreground">Nenhuma coluna ainda. Clique em "Nova coluna" para começar.</p>
             </div>
@@ -227,7 +309,7 @@ const Kanban = () => {
         <main className="flex flex-1 overflow-y-auto p-4 kanban-scrollbar">
           <ListView
             board={board}
-            onRemoveTask={(taskId) => setBoard(removeTask(board, taskId))}
+            onRemoveTask={handleRemoveTask}
             onMoveTask={handleMoveTaskFromList}
           />
         </main>

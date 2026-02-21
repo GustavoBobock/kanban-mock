@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { type Task, type Column } from "@/lib/mock-storage";
+import { type Task, type Column } from "@/lib/api";
 import { GripVertical, Trash2, X } from "lucide-react";
 import {
   AlertDialog,
@@ -18,9 +18,9 @@ const COLUMN_COLORS = [
   { bg: "hsl(200 75% 95%)", border: "hsl(200 70% 58%)", badge: "hsl(200 70% 50%)", header: "hsl(200 40% 93%)" },
   { bg: "hsl(160 60% 94%)", border: "hsl(160 65% 45%)", badge: "hsl(160 65% 40%)", header: "hsl(160 30% 93%)" },
   { bg: "hsl(340 70% 96%)", border: "hsl(340 75% 60%)", badge: "hsl(340 75% 55%)", header: "hsl(340 40% 95%)" },
-  { bg: "hsl(40 85% 95%)",  border: "hsl(40 90% 50%)",  badge: "hsl(40 90% 45%)",  header: "hsl(40 50% 93%)" },
+  { bg: "hsl(40 85% 95%)", border: "hsl(40 90% 50%)", badge: "hsl(40 90% 45%)", header: "hsl(40 50% 93%)" },
   { bg: "hsl(280 60% 96%)", border: "hsl(280 60% 62%)", badge: "hsl(280 60% 55%)", header: "hsl(280 30% 95%)" },
-  { bg: "hsl(20 80% 95%)",  border: "hsl(20 80% 55%)",  badge: "hsl(20 80% 50%)",  header: "hsl(20 40% 93%)" },
+  { bg: "hsl(20 80% 95%)", border: "hsl(20 80% 55%)", badge: "hsl(20 80% 50%)", header: "hsl(20 40% 93%)" },
   { bg: "hsl(170 55% 94%)", border: "hsl(170 55% 42%)", badge: "hsl(170 55% 38%)", header: "hsl(170 30% 92%)" },
 ];
 
@@ -130,9 +130,8 @@ export function KanbanColumn({
   return (
     <>
       <div
-        className={`flex w-72 shrink-0 flex-col rounded-2xl border-2 transition-all ${
-          dragOver ? "scale-[1.01] shadow-lg" : "shadow-sm"
-        }`}
+        className={`flex w-72 shrink-0 flex-col rounded-2xl border-2 transition-all ${dragOver ? "scale-[1.01] shadow-lg" : "shadow-sm"
+          }`}
         style={{
           borderColor: dragOver ? colors.border : `${colors.border}40`,
           backgroundColor: dragOver ? `${colors.bg}` : undefined,

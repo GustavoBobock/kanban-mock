@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { registerUser } from "@/lib/mock-storage";
+import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserPlus } from "lucide-react";
+import { toast } from "sonner";
 
 const Cadastro = () => {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const Cadastro = () => {
     return null;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     const validationError = validate();
@@ -30,12 +31,26 @@ const Cadastro = () => {
       setError(validationError);
       return;
     }
-    const result = registerUser(name.trim(), email.trim(), password);
-    if (!result.ok) {
-      setError(result.error ?? "Erro ao cadastrar.");
+
+    const { error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password: password,
+      options: {
+        data: {
+          full_name: name.trim(),
+        },
+      },
+    });
+
+    if (error) {
+      setError(error.message);
       return;
     }
-    navigate("/login", { replace: true });
+
+    toast.success("Conta criada! Verifique seu email para confirmar.");
+    setTimeout(() => {
+      navigate("/login", { replace: true });
+    }, 2000);
   };
 
   return (

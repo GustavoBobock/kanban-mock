@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type Board, type Task } from "@/lib/mock-storage";
+import { type Board, type Task } from "@/lib/api";
 import { getColumnColor } from "@/components/KanbanColumn";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";

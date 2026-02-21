@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { loginUser } from "@/lib/mock-storage";
-import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,24 +8,28 @@ import { LogIn } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) {
       setError("Preencha todos os campos.");
       return;
     }
-    const result = loginUser(email, password);
-    if (!result.ok) {
-      setError(result.error ?? "Erro ao entrar.");
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError(error.message);
       return;
     }
-    refresh();
+
     navigate("/kanban", { replace: true });
   };
 
@@ -56,7 +59,15 @@ const Login = () => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Senha</Label>
+              <Link
+                to="/forgot-password"
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Esqueci minha senha
+              </Link>
+            </div>
             <Input
               id="password"
               type="password"

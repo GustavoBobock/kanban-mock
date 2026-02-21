@@ -7,6 +7,8 @@ import { AuthProvider } from "@/lib/auth-context";
 import { ProtectedRoute, GuestRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Cadastro from "./pages/Cadastro";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Kanban from "./pages/Kanban";
 import NotFound from "./pages/NotFound";
 
@@ -23,6 +25,8 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
             <Route path="/cadastro" element={<GuestRoute><Cadastro /></GuestRoute>} />
+            <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
+            <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
             <Route path="/kanban" element={<ProtectedRoute><Kanban /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
