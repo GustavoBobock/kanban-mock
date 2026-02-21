@@ -96,12 +96,40 @@ create policy "Usuários podem deletar colunas em seus quadros."
 
 
 -- Tabela de Tarefas (Tasks)
+create table public.clients (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  name text not null,
+  cnpj text unique,
+  tax_regime text check (tax_regime in ('Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI')),
+  active_obligations text[] default '{}'::text[],
+  email text,
+  phone text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.clients enable row level security;
+
+create policy "Users can manage their own clients"
+  on public.clients
+  for all
+  to authenticated
+  using (auth.uid() = user_id);
+  
 create table public.tasks (
   id uuid default gen_random_uuid() primary key,
   column_id uuid references public.columns(id) on delete cascade not null,
+  client_id uuid references public.clients(id) on delete set null,
   title text not null,
   description text,
   position integer not null default 0,
+  client_name text,
+  client_cnpj text,
+  obligation_type text,
+  due_date date,
+  competence text,
+  priority text default 'Média',
+  observations text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

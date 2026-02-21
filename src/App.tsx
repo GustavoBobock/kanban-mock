@@ -10,6 +10,7 @@ import Cadastro from "./pages/Cadastro";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Kanban from "./pages/Kanban";
+import Clientes from "./pages/Clientes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
             <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
             <Route path="/kanban" element={<ProtectedRoute><Kanban /></ProtectedRoute>} />
+            <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

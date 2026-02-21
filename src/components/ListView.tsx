@@ -2,7 +2,9 @@ import { useState } from "react";
 import { type Board, type Task } from "@/lib/api";
 import { getColumnColor } from "@/components/KanbanColumn";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, User, Briefcase, Calendar } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,9 +52,41 @@ function ListTaskRow({
         className="flex items-start justify-between gap-3 rounded-xl bg-card p-3 shadow-sm"
         style={{ borderLeft: `3px solid ${accentColor}` }}
       >
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-card-foreground">{task.title}</p>
-          {task.description && <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap">{task.description}</p>}
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-card-foreground">{task.title}</p>
+            {task.priority && (
+              <span className={`text-[9px] font-bold px-1.5 rounded-full ${task.priority === "Urgente" ? "bg-red-100 text-red-700" :
+                  task.priority === "Alta" ? "bg-orange-100 text-orange-700" :
+                    "bg-slate-100 text-slate-600"
+                }`}>
+                {task.priority}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {task.client_name && (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <User className="h-3 w-3" />
+                <span>{task.client_name}</span>
+              </div>
+            )}
+            {task.obligation_type && (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Briefcase className="h-3 w-3" />
+                <span>{task.obligation_type}</span>
+              </div>
+            )}
+            {task.due_date && (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Calendar className="h-3 w-3" />
+                <span>{format(parseISO(task.due_date), "dd/MM/yyyy", { locale: ptBR })}</span>
+              </div>
+            )}
+          </div>
+
+          {task.description && <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap line-clamp-1">{task.description}</p>}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">

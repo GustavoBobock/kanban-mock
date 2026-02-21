@@ -1,6 +1,9 @@
 import { useState, useRef } from "react";
 import { type Task, type Column } from "@/lib/api";
-import { GripVertical, Trash2, X } from "lucide-react";
+import { GripVertical, Trash2, X, User, Briefcase, Calendar, AlertTriangle } from "lucide-react";
+import { format, isBefore, isAfter, addDays, startOfDay, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,27 +35,78 @@ interface KanbanCardProps {
   task: Task;
   columnId: string;
   accentColor: string;
+  columnTitle: string;
   onRemove: (taskId: string) => void;
   onDragStart: (e: React.DragEvent, taskId: string, columnId: string) => void;
 }
 
-export function KanbanCard({ task, columnId, accentColor, onRemove, onDragStart }: KanbanCardProps) {
+export function KanbanCard({ task, columnId, accentColor, columnTitle, onRemove, onDragStart }: KanbanCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const getStatusColor = () => {
+    if (columnTitle === "Entregue") return "border-gray-500 bg-gray-50";
+    if (!task.due_date) return "border-slate-200";
+
+    const dueDate = parseISO(task.due_date);
+    const today = startOfDay(new Date());
+
+    if (isBefore(dueDate, today) || dueDate.getTime() === today.getTime()) return "border-red-500 bg-red-50/30";
+    if (isBefore(dueDate, addDays(today, 3))) return "border-amber-500 bg-amber-50/30";
+    return "border-green-500 bg-green-50/30";
+  };
+
+  const statusClass = getStatusColor();
 
   return (
     <>
       <div
         draggable
         onDragStart={(e) => onDragStart(e, task.id, columnId)}
-        className="group flex cursor-grab items-start gap-2 rounded-xl bg-card p-3.5 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:cursor-grabbing"
-        style={{ borderLeft: `3px solid ${accentColor}` }}
+        className={`group flex cursor-grab items-start gap-2 rounded-xl border-l-[4px] bg-card p-3 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:cursor-grabbing ${statusClass}`}
       >
         <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-card-foreground">{task.title}</p>
-          {task.description && (
-            <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <h4 className="text-sm font-bold text-card-foreground leading-tight line-clamp-2">{task.title}</h4>
+            {task.priority === "Urgente" && (
+              <Badge variant="destructive" className="h-4 px-1 text-[8px] uppercase tracking-wider">Urgente</Badge>
+            )}
+          </div>
+
+          {(task.client_name || task.obligation_type) && (
+            <div className="flex flex-col gap-1">
+              {task.client_name && (
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700">
+                  <User className="h-3 w-3 text-primary" />
+                  <span className="truncate">{task.client_name}</span>
+                </div>
+              )}
+              {task.obligation_type && (
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+                  <Briefcase className="h-3 w-3 text-secondary-foreground/60" />
+                  <span>{task.obligation_type}</span>
+                </div>
+              )}
+            </div>
           )}
+
+          <div className="flex items-center justify-between pt-1 border-t border-border/40">
+            {task.due_date ? (
+              <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                <Calendar className="h-3 w-3" />
+                {format(parseISO(task.due_date), "dd/MM/yy", { locale: ptBR })}
+              </div>
+            ) : <div />}
+
+            {task.priority && task.priority !== "Urgente" && (
+              <span className={`text-[10px] font-extrabold px-1.5 rounded-full ${task.priority === "Alta" ? "bg-orange-100 text-orange-700" :
+                  task.priority === "Média" ? "bg-blue-100 text-blue-700" :
+                    "bg-slate-100 text-slate-600"
+                }`}>
+                {task.priority}
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={() => setConfirmOpen(true)}
@@ -202,6 +256,7 @@ export function KanbanColumn({
               key={task.id}
               task={task}
               columnId={column.id}
+              columnTitle={column.title}
               accentColor={colors.border}
               onRemove={onRemoveTask}
               onDragStart={onDragStart}

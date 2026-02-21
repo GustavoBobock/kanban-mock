@@ -7,6 +7,14 @@ export interface Task {
     title: string;
     description?: string;
     position: number;
+    client_id?: string;
+    client_name?: string;
+    client_cnpj?: string;
+    obligation_type?: string;
+    due_date?: string;
+    competence?: string;
+    priority?: string;
+    observations?: string;
 }
 
 export interface Column {
@@ -15,6 +23,19 @@ export interface Column {
     title: string;
     position: number;
     taskIds: string[]; // For compatibility with frontend logic
+}
+
+export type TaxRegime = 'Simples Nacional' | 'Lucro Presumido' | 'Lucro Real' | 'MEI';
+
+export interface Client {
+    id: string;
+    user_id: string;
+    name: string;
+    cnpj?: string;
+    tax_regime?: TaxRegime;
+    active_obligations: string[];
+    email?: string;
+    phone?: string;
 }
 
 export interface Board {
@@ -49,11 +70,13 @@ export const api = {
             if (createError) throw createError;
             board = newBoard;
 
-            // Create default columns
+            // Create default columns for Accounting
             const { error: colsError } = await supabase.from("columns").insert([
                 { board_id: board.id, title: "A Fazer", position: 0 },
-                { board_id: board.id, title: "Em Progresso", position: 1 },
-                { board_id: board.id, title: "Feito", position: 2 },
+                { board_id: board.id, title: "Aguardando Cliente", position: 1 },
+                { board_id: board.id, title: "Em Andamento", position: 2 },
+                { board_id: board.id, title: "Em Revisão", position: 3 },
+                { board_id: board.id, title: "Entregue", position: 4 },
             ]);
             if (colsError) throw colsError;
         }
@@ -117,10 +140,16 @@ export const api = {
         if (error) throw error;
     },
 
-    addTask: async (columnId: string, title: string, description?: string, position: number = 0) => {
+    addTask: async (
+        columnId: string,
+        title: string,
+        description?: string,
+        position: number = 0,
+        extraFields: Partial<Omit<Task, 'id' | 'column_id' | 'title' | 'description' | 'position'>> = {}
+    ) => {
         const { data, error } = await supabase
             .from("tasks")
-            .insert({ column_id: columnId, title, description, position })
+            .insert({ column_id: columnId, title, description, position, ...extraFields })
             .select()
             .single();
         if (error) throw error;
@@ -143,6 +172,40 @@ export const api = {
         if (error) throw error;
     },
 
-    // Helper to reorder tasks in a column (if needed locally or strictly)
-    // For now we just update positions
+    // Clients Methods
+    getClients: async (userId: string): Promise<Client[]> => {
+        const { data, error } = await supabase
+            .from("clients")
+            .select("*")
+            .eq("user_id", userId)
+            .order("name");
+        if (error) throw error;
+        return data || [];
+    },
+
+    addClient: async (client: Omit<Client, 'id' | 'created_at'>) => {
+        const { data, error } = await supabase
+            .from("clients")
+            .insert(client)
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    },
+
+    updateClient: async (clientId: string, updates: Partial<Client>) => {
+        const { error } = await supabase
+            .from("clients")
+            .update(updates)
+            .eq("id", clientId);
+        if (error) throw error;
+    },
+
+    deleteClient: async (clientId: string) => {
+        const { error } = await supabase
+            .from("clients")
+            .delete()
+            .eq("id", clientId);
+        if (error) throw error;
+    },
 };
