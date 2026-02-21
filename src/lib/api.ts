@@ -38,12 +38,26 @@ export interface Client {
     phone?: string;
 }
 
+export type NotificationType = 'alerta' | 'vencida' | 'urgente' | 'concluida';
+
+export interface Notification {
+    id: string;
+    user_id: string;
+    type: NotificationType;
+    title: string;
+    message?: string;
+    task_ids?: string[];
+    read: boolean;
+    created_at: string;
+}
+
 export interface Board {
     id: string;
     user_id: string;
     title: string;
     columns: Column[];
     tasks: Task[];
+    notifications?: Notification[];
 }
 
 export const api = {
@@ -206,6 +220,56 @@ export const api = {
             .from("clients")
             .delete()
             .eq("id", clientId);
+        if (error) throw error;
+    },
+
+    // Notifications Methods
+    getNotifications: async (userId: string): Promise<Notification[]> => {
+        const { data, error } = await supabase
+            .from("notifications")
+            .select("*")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false });
+        if (error) throw error;
+        return data || [];
+    },
+
+    addNotification: async (notification: Omit<Notification, 'id' | 'created_at' | 'read'>) => {
+        const { data, error } = await supabase
+            .from("notifications")
+            .insert({ ...notification, read: false })
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    },
+
+    markAsRead: async (notificationId: string) => {
+        const { error } = await supabase
+            .from("notifications")
+            .update({ read: true })
+            .eq("id", notificationId);
+        if (error) throw error;
+    },
+
+    markAllAsRead: async (userId: string) => {
+        const { error } = await supabase
+            .from("notifications")
+            .update({ read: true })
+            .eq("user_id", userId)
+            .eq("read", false);
+        if (error) throw error;
+    },
+
+    deleteOldNotifications: async (userId: string) => {
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+        const { error } = await supabase
+            .from("notifications")
+            .delete()
+            .eq("user_id", userId)
+            .lt("created_at", ninetyDaysAgo.toISOString());
         if (error) throw error;
     },
 };

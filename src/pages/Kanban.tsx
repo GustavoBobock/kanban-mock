@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { api, type Board, type Column, type Task, type Client } from "@/lib/api";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { ListView } from "@/components/ListView";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -377,6 +378,8 @@ const Kanban = () => {
             {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
             Gerar do Mês
           </Button>
+
+          <NotificationCenter boardTasks={board?.tasks || []} />
 
           <Button onClick={() => setTaskDialogOpen(true)} size="sm" className="bg-white text-primary hover:bg-white/90 font-bold">
             <Plus className="mr-1 h-4 w-4" />

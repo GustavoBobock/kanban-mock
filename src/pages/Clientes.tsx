@@ -33,7 +33,28 @@ import { toast } from "sonner";
 import { ImportCSVModal } from "@/components/ImportCSVModal";
 
 const TAX_REGIMES: TaxRegime[] = ['Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI'];
-const OBLIGATIONS = ["DCTF", "SPED", "PGDAS", "DEFIS", "ECF", "ECD", "REINF", "NFS-e", "Simples Nacional", "Folha de Pagamento", "FGTS"];
+
+interface ObligationInfo {
+    id: string;
+    label: string;
+    vencimento: string;
+    periodicidade: 'mensal' | 'anual';
+    suggestedRegimes: TaxRegime[];
+}
+
+const OBLIGATION_METADATA: ObligationInfo[] = [
+    { id: "PGDAS", label: "PGDAS", vencimento: "Dia 20/mês", periodicidade: 'mensal', suggestedRegimes: ['Simples Nacional', 'MEI'] },
+    { id: "DCTF", label: "DCTF", vencimento: "Dia 15/mês", periodicidade: 'mensal', suggestedRegimes: ['Lucro Presumido', 'Lucro Real'] },
+    { id: "REINF", label: "REINF", vencimento: "Dia 15/mês", periodicidade: 'mensal', suggestedRegimes: ['Lucro Presumido', 'Lucro Real'] },
+    { id: "Folha de Pagamento", label: "Folha", vencimento: "Dia 07/mês", periodicidade: 'mensal', suggestedRegimes: ['Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI'] },
+    { id: "FGTS", label: "FGTS", vencimento: "Dia 07/mês", periodicidade: 'mensal', suggestedRegimes: ['Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI'] },
+    { id: "NFS-e", label: "NFS-e", vencimento: "Conforme município", periodicidade: 'mensal', suggestedRegimes: [] },
+    { id: "SPED", label: "SPED", vencimento: "Variável", periodicidade: 'anual', suggestedRegimes: ['Lucro Presumido', 'Lucro Real'] },
+    { id: "ECD", label: "ECD", vencimento: "Junho", periodicidade: 'anual', suggestedRegimes: ['Lucro Presumido', 'Lucro Real'] },
+    { id: "ECF", label: "ECF", vencimento: "Julho", periodicidade: 'anual', suggestedRegimes: ['Lucro Presumido', 'Lucro Real'] },
+    { id: "DEFIS", label: "DEFIS", vencimento: "Março", periodicidade: 'anual', suggestedRegimes: ['Simples Nacional'] },
+    { id: "Simples Nacional", label: "DAS Anual", vencimento: "Março", periodicidade: 'anual', suggestedRegimes: ['Simples Nacional', 'MEI'] },
+];
 
 const Clientes = () => {
     const { user } = useAuth();
@@ -260,7 +281,18 @@ const Clientes = () => {
                         <div className="grid grid-cols-3 gap-4">
                             <div className="space-y-2 col-span-1">
                                 <Label>Regime Tributário</Label>
-                                <Select value={regime} onValueChange={(v) => setRegime(v as TaxRegime)}>
+                                <Select value={regime} onValueChange={(v) => {
+                                    const nextRegime = v as TaxRegime;
+                                    setRegime(nextRegime);
+
+                                    // Auto-select obligations based on regime
+                                    if (!editingClient) {
+                                        const suggested = OBLIGATION_METADATA
+                                            .filter(ob => ob.suggestedRegimes.includes(nextRegime))
+                                            .map(ob => ob.id);
+                                        setSelectedObligations(suggested);
+                                    }
+                                }}>
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
@@ -279,22 +311,74 @@ const Clientes = () => {
                             </div>
                         </div>
 
-                        <div className="space-y-3">
-                            <Label className="text-base font-bold">Obrigações Ativas</Label>
-                            <div className="grid grid-cols-3 gap-3 rounded-xl border bg-slate-50/50 p-4">
-                                {OBLIGATIONS.map(ob => (
-                                    <div key={ob} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={`ob-${ob}`}
-                                            checked={selectedObligations.includes(ob)}
-                                            onCheckedChange={(checked) => {
-                                                if (checked) setSelectedObligations([...selectedObligations, ob]);
-                                                else setSelectedObligations(selectedObligations.filter(i => i !== ob));
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-base font-bold">Obrigações Ativas</Label>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-[10px] h-7 px-2"
+                                        onClick={() => setSelectedObligations(OBLIGATION_METADATA.map(o => o.id))}
+                                    >
+                                        Marcar Todas
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-[10px] h-7 px-2 text-destructive hover:text-destructive"
+                                        onClick={() => setSelectedObligations([])}
+                                    >
+                                        Desmarcar Todas
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {OBLIGATION_METADATA.map(ob => {
+                                    const isSelected = selectedObligations.includes(ob.id);
+                                    return (
+                                        <div
+                                            key={ob.id}
+                                            onClick={() => {
+                                                if (isSelected) setSelectedObligations(selectedObligations.filter(i => i !== ob.id));
+                                                else setSelectedObligations([...selectedObligations, ob.id]);
                                             }}
-                                        />
-                                        <Label htmlFor={`ob-${ob}`} className="text-xs font-medium cursor-pointer">{ob}</Label>
-                                    </div>
-                                ))}
+                                            className={`
+                                                relative flex flex-col p-3 rounded-xl border-2 transition-all cursor-pointer select-none
+                                                ${isSelected
+                                                    ? 'bg-primary/5 border-primary shadow-sm'
+                                                    : 'bg-white border-slate-100 hover:border-slate-200 text-slate-500'}
+                                            `}
+                                        >
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className={`text-sm font-bold ${isSelected ? 'text-primary' : 'text-slate-700'}`}>
+                                                    {ob.label}
+                                                </span>
+                                                {isSelected && (
+                                                    <div className="bg-primary text-white rounded-full p-0.5">
+                                                        <Plus className="h-3 w-3 rotate-45" /> {/* Use as a checkmark fallback if needed, or keeping it clean */}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="text-[10px] leading-tight font-medium opacity-80">
+                                                    {ob.vencimento}
+                                                </span>
+                                                <div className="flex items-center gap-1 mt-1">
+                                                    <span className={`
+                                                        text-[9px] uppercase font-bold px-1.5 py-0.5 rounded
+                                                        ${ob.periodicidade === 'mensal'
+                                                            ? 'bg-blue-100 text-blue-700'
+                                                            : 'bg-green-100 text-green-700'}
+                                                    `}>
+                                                        {ob.periodicidade}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
