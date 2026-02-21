@@ -490,69 +490,67 @@ const Kanban = () => {
       </div>
 
       {/* Board */}
-      {viewMode === "kanban" ? (
-        <main className="flex flex-1 gap-4 overflow-x-auto p-4 kanban-scrollbar">
-          {board?.columns.map((col, idx) => {
-            let tasks = col.taskIds
-              .map((id) => board.tasks.find((t) => t.id === id))
-              .filter(Boolean) as Task[];
+      {(() => {
+        if (!board) return null;
 
-            // Apply filtering
-            if (filterClientId !== "all") {
-              tasks = tasks.filter(t => t.client_id === filterClientId);
-            }
-            if (filterClient) {
-              tasks = tasks.filter(t => t.client_name?.toLowerCase().includes(filterClient.toLowerCase()));
-            }
-            if (filterObligation && filterObligation !== "all") {
-              tasks = tasks.filter(t => t.obligation_type === filterObligation);
-            }
-            if (filterStatus && filterStatus !== "all") {
-              const today = startOfDay(new Date());
-              if (filterStatus === "vencidas") {
-                tasks = tasks.filter(t => t.due_date && isBefore(parseISO(t.due_date), today));
-              } else if (filterStatus === "urgentes") {
-                tasks = tasks.filter(t => {
-                  if (!t.due_date) return false;
-                  const date = parseISO(t.due_date);
-                  return (isAfter(date, today) || date.getTime() === today.getTime()) && isBefore(date, addDays(today, 3));
-                });
-              } else if (filterStatus === "no_prazo") {
-                tasks = tasks.filter(t => !t.due_date || isAfter(parseISO(t.due_date), addDays(today, 3)));
-              }
-            }
+        const filteredTasks = board.tasks.filter(t => {
+          if (filterClientId !== "all" && t.client_id !== filterClientId) return false;
+          if (filterClient && !t.client_name?.toLowerCase().includes(filterClient.toLowerCase())) return false;
+          if (filterObligation && filterObligation !== "all" && t.obligation_type !== filterObligation) return false;
 
-            return (
-              <KanbanColumn
-                key={col.id}
-                column={col}
-                tasks={tasks}
-                colorIndex={idx}
-                onRename={handleRenameColumn}
-                onRemoveColumn={handleRemoveColumn}
-                onRemoveTask={handleRemoveTask}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-              />
-            );
-          })}
+          if (filterStatus && filterStatus !== "all") {
+            const today = startOfDay(new Date());
+            if (!t.due_date) return filterStatus === "no_prazo";
+            const date = parseISO(t.due_date);
 
-          {board?.columns.length === 0 && (
-            <div className="flex flex-1 items-center justify-center">
-              <p className="text-muted-foreground">Nenhuma coluna ainda. Clique em "Nova coluna" para começar.</p>
-            </div>
-          )}
-        </main>
-      ) : (
-        <main className="flex flex-1 overflow-y-auto p-4 kanban-scrollbar">
-          <ListView
-            board={board}
-            onRemoveTask={handleRemoveTask}
-            onMoveTask={handleMoveTaskFromList}
-          />
-        </main>
-      )}
+            if (filterStatus === "vencidas") return isBefore(date, today);
+            if (filterStatus === "urgentes") return (isAfter(date, today) || date.getTime() === today.getTime()) && isBefore(date, addDays(today, 3));
+            if (filterStatus === "no_prazo") return isAfter(date, addDays(today, 3));
+          }
+          return true;
+        });
+
+        const filteredBoard = { ...board, tasks: filteredTasks };
+
+        return viewMode === "kanban" ? (
+          <main className="flex flex-1 gap-4 overflow-x-auto p-4 kanban-scrollbar">
+            {filteredBoard.columns.map((col, idx) => {
+              const columnTasks = col.taskIds
+                .map((id) => filteredBoard.tasks.find((t) => t.id === id))
+                .filter(Boolean) as Task[];
+
+              return (
+                <KanbanColumn
+                  key={col.id}
+                  column={col}
+                  tasks={columnTasks}
+                  colorIndex={idx}
+                  onRename={handleRenameColumn}
+                  onRemoveColumn={handleRemoveColumn}
+                  onRemoveTask={handleRemoveTask}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                />
+              );
+            })}
+
+            {filteredBoard.columns.length === 0 && (
+              <div className="flex flex-1 items-center justify-center">
+                <p className="text-muted-foreground">Nenhuma coluna ainda. Clique em "Nova coluna" para começar.</p>
+              </div>
+            )}
+          </main>
+        ) : (
+          <main className="flex flex-1 overflow-y-auto p-4 kanban-scrollbar">
+            <ListView
+              board={filteredBoard}
+              onRemoveTask={handleRemoveTask}
+              onMoveTask={handleMoveTaskFromList}
+            />
+          </main>
+        );
+      })()}
 
       {/* New column dialog */}
       <Dialog open={colDialogOpen} onOpenChange={setColDialogOpen}>
