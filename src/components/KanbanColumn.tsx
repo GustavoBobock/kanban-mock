@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { type Task, type Column } from "@/lib/api";
+import { useState, useRef, useEffect } from "react";
+import { type Task, type Column, type Client } from "@/lib/api";
 import {
   format,
   isBefore,
@@ -55,6 +55,13 @@ import {
   Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pencil, Check as CheckIcon, X as XIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 interface KanbanCardProps {
   task: Task;
@@ -66,6 +73,8 @@ interface KanbanCardProps {
   onClick: () => void;
   onAnotarClick?: (task: Task) => void;
   onConcluirClick?: (taskId: string) => void;
+  onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>;
+  clients: Client[];
 }
 
 export function KanbanCard({
@@ -77,10 +86,62 @@ export function KanbanCard({
   onDragStart,
   onClick,
   onAnotarClick,
-  onConcluirClick
+  onConcluirClick,
+  onUpdateTask,
+  clients
 }: KanbanCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Local edit state
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [editDueDate, setEditDueDate] = useState<Date | undefined>(task.due_date ? parseISO(task.due_date) : undefined);
+  const [editPriority, setEditPriority] = useState(task.priority || "Média");
+  const [editClientId, setEditClientId] = useState(task.client_id || "");
+  const editContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleSaveInline = async () => {
+    if (!onUpdateTask) return;
+    try {
+      await onUpdateTask(task.id, {
+        title: editTitle,
+        due_date: editDueDate?.toISOString(),
+        priority: editPriority,
+        client_id: editClientId === "" ? undefined : editClientId,
+        client_name: clients.find(c => c.id === editClientId)?.name
+      });
+      setIsEditing(false);
+    } catch (error) {
+      // toast is handled in parent
+    }
+  };
+
+  const handleCancelInline = () => {
+    setEditTitle(task.title);
+    setEditDueDate(task.due_date ? parseISO(task.due_date) : undefined);
+    setEditPriority(task.priority || "Média");
+    setEditClientId(task.client_id || "");
+    setIsEditing(false);
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (isEditing && editContainerRef.current && !editContainerRef.current.contains(event.target as Node)) {
+        handleSaveInline();
+      }
+    }
+
+    if (isEditing) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isEditing, editTitle, editDueDate, editPriority, editClientId]);
 
   const getStatusColor = () => {
     if (columnTitle === "Entregue") return "border-gray-500 bg-gray-50";
@@ -134,85 +195,234 @@ export function KanbanCard({
   const isAfter16 = getHours(now) >= 16;
   const venceHoje = task.due_date && differenceInDays(startOfDay(parseISO(task.due_date)), startOfDay(now)) === 0;
 
+  const renderInlineEdition = () => (
+    <div
+      ref={editContainerRef}
+      className="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-xl border-2 border-primary/30 animate-in zoom-in-95 duration-200"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <Label className="text-[10px] font-bold uppercase text-slate-400">Título da Tarefa</Label>
+          <Input
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            className="h-8 text-xs font-medium focus-visible:ring-primary/20"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSaveInline();
+              if (e.key === "Escape") handleCancelInline();
+            }}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-[10px] font-bold uppercase text-slate-400">Vencimento</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "h-8 w-full justify-start text-left font-normal text-xs px-2",
+                    !editDueDate && "text-muted-foreground"
+                  )}
+                >
+                  <Calendar className="mr-1 h-3 w-3" />
+                  {editDueDate ? format(editDueDate, "dd/MM/yy") : <span>Data</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={editDueDate}
+                  onSelect={setEditDueDate}
+                  initialFocus
+                  locale={ptBR}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[10px] font-bold uppercase text-slate-400">Prioridade</Label>
+            <Select value={editPriority} onValueChange={setEditPriority}>
+              <SelectTrigger className="h-8 text-xs px-2">
+                <SelectValue placeholder="Prioridade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Baixa">Baixa</SelectItem>
+                <SelectItem value="Média">Média</SelectItem>
+                <SelectItem value="Alta">Alta</SelectItem>
+                <SelectItem value="Urgente">Urgente</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-[10px] font-bold uppercase text-slate-400">Cliente</Label>
+          <Select value={editClientId} onValueChange={setEditClientId}>
+            <SelectTrigger className="h-8 text-xs px-2">
+              <SelectValue placeholder="Selecione o cliente" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Nenhum</SelectItem>
+              {clients.map(client => (
+                <SelectItem key={client.id} value={client.id}>
+                  {client.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-2">
+        <Button
+          size="sm"
+          className="h-8 flex-1 bg-green-600 hover:bg-green-700 font-bold gap-1"
+          onClick={handleSaveInline}
+        >
+          <CheckIcon className="h-3.5 w-3.5" /> Salvar
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 flex-1 text-slate-500 font-bold gap-1"
+          onClick={handleCancelInline}
+        >
+          <XIcon className="h-3.5 w-3.5" /> Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+
   const renderCardContent = () => (
     <div
-      draggable
+      draggable={!isEditing}
       onDragStart={(e) => {
+        if (isEditing) return;
         e.stopPropagation();
         onDragStart(e, task.id, columnId);
       }}
-      onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
+      onClick={isEditing ? undefined : onClick}
+      onMouseEnter={() => !isEditing && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`group relative flex flex-col gap-2 rounded-xl bg-card p-4 shadow-md transition-all hover:shadow-lg active:scale-[0.98] border border-border/50 ${getStatusColor()}`}
-    >
-      {/* Botão flutuante de histórico rápido */}
-      {task.notes_count && task.notes_count > 0 && (
-        <div className="absolute top-2 right-2 flex gap-1">
-          <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
-        </div>
+      className={cn(
+        "group relative flex flex-col gap-2 rounded-xl bg-card p-4 shadow-md transition-all active:scale-[0.98] border border-border/50",
+        !isEditing && "hover:shadow-lg",
+        getStatusColor(),
+        isEditing && "ring-2 ring-primary/20 shadow-xl scale-[1.02] z-10"
       )}
-
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[13px] font-bold leading-tight text-card-foreground line-clamp-2">
-            {task.title}
-          </p>
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            {task.client_name && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-slate-100/50 px-1.5 py-0.5 rounded">
-                <User className="h-2.5 w-2.5" />
-                {task.client_name}
-              </span>
-            )}
-            {task.priority && (
-              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${task.priority === "Urgente" ? "bg-red-100 text-red-700" :
-                task.priority === "Alta" ? "bg-orange-100 text-orange-700" :
-                  "bg-slate-100 text-slate-600"
-                }`}>
-                {task.priority}
-              </span>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setConfirmOpen(true);
-          }}
-          className="shrink-0 rounded-lg p-1 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-          title="Remover tarefa"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="flex items-center justify-between mt-1 text-[10px]">
-        <div className="flex items-center gap-3">
-          {task.due_date && (
-            <div className={`flex items-center gap-1 font-bold ${isBefore(parseISO(task.due_date), startOfDay(new Date())) ? "text-red-600" : "text-slate-500"}`}>
-              <Calendar className="h-3 w-3" />
-              {format(parseISO(task.due_date), "dd/MM", { locale: ptBR })}
+    >
+      {isEditing ? renderInlineEdition() : (
+        <>
+          {/* Botão flutuante de histórico rápido */}
+          {task.notes_count && task.notes_count > 0 && (
+            <div className="absolute top-2 right-2 flex gap-1">
+              <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
             </div>
           )}
 
-          {/* Indicadores de Notas e Imagens - SOMENTE SE > 0 */}
-          <div className="flex items-center gap-2">
-            {task.notes_count && task.notes_count > 0 && (
-              <div className="flex items-center gap-0.5 text-blue-600 font-bold">
-                <FileText className="h-3 w-3" />
-                {task.notes_count}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[13px] font-bold leading-tight text-card-foreground line-clamp-2">
+                {task.title}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {task.client_name && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-slate-100/50 px-1.5 py-0.5 rounded">
+                    <User className="h-2.5 w-2.5" />
+                    {task.client_name}
+                  </span>
+                )}
+                {task.priority && (
+                  <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${task.priority === "Urgente" ? "bg-red-100 text-red-700" :
+                    task.priority === "Alta" ? "bg-orange-100 text-orange-700" :
+                      "bg-slate-100 text-slate-600"
+                    }`}>
+                    {task.priority}
+                  </span>
+                )}
               </div>
-            )}
-            {task.images_count && task.images_count > 0 && (
-              <div className="flex items-center gap-0.5 text-blue-500">
-                <Paperclip className="h-3.5 w-3.5" />
-                {task.images_count}
-              </div>
-            )}
+            </div>
+            <div className="flex flex-col gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditing(true);
+                }}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                title="Editar rápida"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmOpen(true);
+                }}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                title="Remover tarefa"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
+
+          <div className="flex items-center justify-between mt-1 text-[10px]">
+            <div className="flex items-center gap-3">
+              {task.due_date && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      className={cn(
+                        "flex items-center gap-1 font-bold transition-colors hover:bg-slate-100 rounded px-1 -ml-1",
+                        isBefore(parseISO(task.due_date), startOfDay(new Date())) ? "text-red-600" : "text-slate-500"
+                      )}
+                      title="Alteração rápida de data"
+                    >
+                      <Calendar className="h-3 w-3" />
+                      {format(parseISO(task.due_date), "dd/MM", { locale: ptBR })}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={parseISO(task.due_date)}
+                      onSelect={(date) => {
+                        if (date && onUpdateTask) {
+                          onUpdateTask(task.id, { due_date: date.toISOString() });
+                        }
+                      }}
+                      initialFocus
+                      locale={ptBR}
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+
+              {/* Indicadores de Notas e Imagens - SOMENTE SE > 0 */}
+              <div className="flex items-center gap-2">
+                {task.notes_count && task.notes_count > 0 && (
+                  <div className="flex items-center gap-0.5 text-blue-600 font-bold">
+                    <FileText className="h-3 w-3" />
+                    {task.notes_count}
+                  </div>
+                )}
+                {task.images_count && task.images_count > 0 && (
+                  <div className="flex items-center gap-0.5 text-blue-500">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    {task.images_count}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -220,12 +430,17 @@ export function KanbanCard({
     <>
       <HoverCard openDelay={500}>
         <HoverCardTrigger asChild>
-          {renderCardContent()}
+          <div>
+            {renderCardContent()}
+          </div>
         </HoverCardTrigger>
         <HoverCardContent
           side="right"
           align="start"
-          className="w-[320px] p-0 overflow-hidden border-none shadow-2xl z-[100] animate-in fade-in duration-200"
+          className={cn(
+            "w-[320px] p-0 overflow-hidden border-none shadow-2xl z-[100] animate-in fade-in duration-200",
+            isEditing && "hidden"
+          )}
         >
           {urgency && (
             <div className={`p-3 text-white ${urgency.color} flex flex-col gap-1`}>
@@ -386,6 +601,8 @@ interface KanbanColumnProps {
   onTaskClick: (task: Task) => void;
   onAnotarClick?: (task: Task) => void;
   onConcluirClick?: (taskId: string) => void;
+  onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>;
+  clients: Client[];
 }
 
 export function KanbanColumn({
@@ -401,7 +618,9 @@ export function KanbanColumn({
   onColumnDragStart,
   onTaskClick,
   onAnotarClick,
-  onConcluirClick
+  onConcluirClick,
+  onUpdateTask,
+  clients
 }: KanbanColumnProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(column.title);
@@ -495,6 +714,8 @@ export function KanbanColumn({
             onClick={() => onTaskClick(task)}
             onAnotarClick={onAnotarClick}
             onConcluirClick={onConcluirClick}
+            onUpdateTask={onUpdateTask}
+            clients={clients}
           />
         ))}
 

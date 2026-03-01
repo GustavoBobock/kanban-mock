@@ -230,6 +230,14 @@ export const api = {
         if (error) throw error;
     },
 
+    updateTask: async (taskId: string, updates: Partial<Task>) => {
+        const { error } = await supabase
+            .from("tasks")
+            .update(updates)
+            .eq("id", taskId);
+        if (error) throw error;
+    },
+
     // Clients Methods
     getClients: async (userId: string): Promise<Client[]> => {
         const { data, error } = await supabase

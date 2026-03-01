@@ -18,14 +18,23 @@ import {
     Send,
     Trash2,
     Edit2,
+    Pencil,
+    Save,
     X,
     Loader2,
     Calendar,
     User,
     Briefcase,
     AlertTriangle,
-    MessageSquare
+    MessageSquare,
+    ChevronDown,
+    Building2,
+    Hash
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/lib/auth-context";
 
@@ -63,6 +72,60 @@ export function TaskDetailModal({ task, isOpen, onClose, onUpdate, clients, defa
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Task Editing State
+    const [isEditingTask, setIsEditingTask] = useState(false);
+    const [editedTask, setEditedTask] = useState<Partial<Task>>({});
+    const [hasChanges, setHasChanges] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            setEditedTask({
+                title: task.title,
+                client_id: task.client_id,
+                client_name: task.client_name,
+                client_cnpj: task.client_cnpj,
+                obligation_type: task.obligation_type,
+                due_date: task.due_date,
+                competence: task.competence,
+                priority: task.priority || "Média",
+                observations: task.observations
+            });
+            setIsEditingTask(false);
+            setHasChanges(false);
+        }
+    }, [isOpen, task]);
+
+    const handleTaskFieldChange = (field: keyof Task, value: any) => {
+        setEditedTask(prev => ({ ...prev, [field]: value }));
+        setHasChanges(true);
+    };
+
+    const handleSaveTask = async () => {
+        try {
+            setIsSaving(true);
+            await api.updateTask(task.id, editedTask);
+            setHasChanges(false);
+            setIsEditingTask(false);
+            onUpdate();
+            toast.success("Tarefa atualizada com sucesso!");
+        } catch (error) {
+            toast.error("Erro ao atualizar tarefa.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleClose = () => {
+        if (hasChanges) {
+            if (confirm("Você tem alterações não salvas. Deseja sair?")) {
+                onClose();
+            }
+        } else {
+            onClose();
+        }
+    };
 
     // Persistence of draft
     useEffect(() => {
@@ -218,14 +281,41 @@ export function TaskDetailModal({ task, isOpen, onClose, onUpdate, clients, defa
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+        <Dialog open={isOpen} onOpenChange={(v) => !v && handleClose()}>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 border-none shadow-2xl">
                 <DialogHeader className="p-6 pb-2 border-b">
                     <div className="flex items-center justify-between pr-8">
-                        <DialogTitle className="text-xl font-bold">{task.title}</DialogTitle>
-                        <Badge variant={task.priority === "Urgente" ? "destructive" : "secondary"}>
-                            {task.priority || "Média"}
-                        </Badge>
+                        {isEditingTask ? (
+                            <Input
+                                value={editedTask.title}
+                                onChange={(e) => handleTaskFieldChange("title", e.target.value)}
+                                className="text-xl font-bold h-9 border-primary/30 focus-visible:ring-primary/20"
+                            />
+                        ) : (
+                            <DialogTitle className="text-xl font-bold">{task.title}</DialogTitle>
+                        )}
+                        <div className="flex items-center gap-2">
+                            {!isEditingTask && (
+                                <Badge variant={task.priority === "Urgente" ? "destructive" : "secondary"}>
+                                    {task.priority || "Média"}
+                                </Badge>
+                            )}
+                            <Button
+                                variant={isEditingTask ? "outline" : "ghost"}
+                                size="sm"
+                                className={cn(
+                                    "h-8 gap-1.5 font-bold",
+                                    isEditingTask ? "text-slate-500" : "text-primary hover:text-primary hover:bg-primary/5"
+                                )}
+                                onClick={() => isEditingTask ? setIsEditingTask(false) : setIsEditingTask(true)}
+                            >
+                                {isEditingTask ? (
+                                    <><X className="h-3.5 w-3.5" /> Cancelar</>
+                                ) : (
+                                    <><Pencil className="h-3.5 w-3.5" /> Editar tarefa</>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                 </DialogHeader>
 
@@ -253,42 +343,203 @@ export function TaskDetailModal({ task, isOpen, onClose, onUpdate, clients, defa
                     </div>
 
                     <ScrollArea className="flex-1 overflow-y-auto">
-                        <TabsContent value="details" className="p-6 m-0 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
+                        <TabsContent value="details" className="p-6 m-0 space-y-6">
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-2">
                                     <Label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
-                                        <User className="h-3 w-3" /> Cliente
+                                        <User className="h-3.5 w-3.5" /> Cliente
                                     </Label>
-                                    <p className="text-sm font-medium">{task.client_name || "N/A"}</p>
+                                    {isEditingTask ? (
+                                        <Select
+                                            value={editedTask.client_id || "none"}
+                                            onValueChange={(val) => {
+                                                handleTaskFieldChange("client_id", val === "none" ? undefined : val);
+                                                handleTaskFieldChange("client_name", val === "none" ? undefined : clients.find(c => c.id === val)?.name);
+                                            }}
+                                        >
+                                            <SelectTrigger className={cn(
+                                                "h-10 text-sm",
+                                                editedTask.client_id !== task.client_id && "border-primary ring-1 ring-primary/20 bg-primary/5"
+                                            )}>
+                                                <SelectValue placeholder="Selecione o cliente" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">Nenhum</SelectItem>
+                                                {clients.map(c => (
+                                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <p className="text-sm font-semibold text-slate-700">{task.client_name || "N/A"}</p>
+                                    )}
                                 </div>
-                                <div className="space-y-1.5">
+
+                                <div className="space-y-2">
                                     <Label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
-                                        <Briefcase className="h-3 w-3" /> Obrigação
+                                        <Hash className="h-3.5 w-3.5" /> CNPJ
                                     </Label>
-                                    <p className="text-sm font-medium">{task.obligation_type || "N/A"}</p>
+                                    {isEditingTask ? (
+                                        <Input
+                                            value={editedTask.client_cnpj || ""}
+                                            onChange={(e) => handleTaskFieldChange("client_cnpj", e.target.value)}
+                                            placeholder="00.000.000/0000-00"
+                                            className={cn(
+                                                "h-10 text-sm",
+                                                editedTask.client_cnpj !== task.client_cnpj && "border-primary ring-1 ring-primary/20 bg-primary/5"
+                                            )}
+                                        />
+                                    ) : (
+                                        <p className="text-sm font-semibold text-slate-700">{task.client_cnpj || "N/A"}</p>
+                                    )}
                                 </div>
-                                <div className="space-y-1.5">
+
+                                <div className="space-y-2">
                                     <Label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
-                                        <Calendar className="h-3 w-3" /> Vencimento
+                                        <Briefcase className="h-3.5 w-3.5" /> Obrigação
                                     </Label>
-                                    <p className="text-sm font-medium">
-                                        {task.due_date ? format(parseISO(task.due_date), "PPP", { locale: ptBR }) : "Sem data"}
-                                    </p>
+                                    {isEditingTask ? (
+                                        <Input
+                                            value={editedTask.obligation_type || ""}
+                                            onChange={(e) => handleTaskFieldChange("obligation_type", e.target.value)}
+                                            className={cn(
+                                                "h-10 text-sm",
+                                                editedTask.obligation_type !== task.obligation_type && "border-primary ring-1 ring-primary/20 bg-primary/5"
+                                            )}
+                                        />
+                                    ) : (
+                                        <p className="text-sm font-semibold text-slate-700">{task.obligation_type || "N/A"}</p>
+                                    )}
                                 </div>
-                                <div className="space-y-1.5">
+
+                                <div className="space-y-2">
                                     <Label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
-                                        <MessageSquare className="h-3 w-3" /> Competência
+                                        <Calendar className="h-3.5 w-3.5" /> Vencimento
                                     </Label>
-                                    <p className="text-sm font-medium">{task.competence || "N/A"}</p>
+                                    {isEditingTask ? (
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    className={cn(
+                                                        "h-10 w-full justify-start text-left font-normal text-sm",
+                                                        !editedTask.due_date && "text-muted-foreground",
+                                                        editedTask.due_date !== task.due_date && "border-primary ring-1 ring-primary/20 bg-primary/5"
+                                                    )}
+                                                >
+                                                    <Calendar className="mr-2 h-4 w-4" />
+                                                    {editedTask.due_date ? format(parseISO(editedTask.due_date), "PPP", { locale: ptBR }) : <span>Selecione uma data</span>}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <CalendarComponent
+                                                    mode="single"
+                                                    selected={editedTask.due_date ? parseISO(editedTask.due_date) : undefined}
+                                                    onSelect={(date) => handleTaskFieldChange("due_date", date?.toISOString())}
+                                                    initialFocus
+                                                    locale={ptBR}
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
+                                    ) : (
+                                        <p className="text-sm font-semibold text-slate-700">
+                                            {task.due_date ? format(parseISO(task.due_date), "PPP", { locale: ptBR }) : "Sem data"}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                                        <MessageSquare className="h-3.5 w-3.5" /> Competência
+                                    </Label>
+                                    {isEditingTask ? (
+                                        <Input
+                                            value={editedTask.competence || ""}
+                                            onChange={(e) => handleTaskFieldChange("competence", e.target.value)}
+                                            placeholder="MM/AAAA"
+                                            className={cn(
+                                                "h-10 text-sm",
+                                                editedTask.competence !== task.competence && "border-primary ring-1 ring-primary/20 bg-primary/5"
+                                            )}
+                                        />
+                                    ) : (
+                                        <p className="text-sm font-semibold text-slate-700">{task.competence || "N/A"}</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                                        <AlertTriangle className="h-3.5 w-3.5" /> Prioridade
+                                    </Label>
+                                    {isEditingTask ? (
+                                        <Select
+                                            value={editedTask.priority || "Média"}
+                                            onValueChange={(val) => handleTaskFieldChange("priority", val)}
+                                        >
+                                            <SelectTrigger className={cn(
+                                                "h-10 text-sm",
+                                                editedTask.priority !== task.priority && "border-primary ring-1 ring-primary/20 bg-primary/5"
+                                            )}>
+                                                <SelectValue placeholder="Prioridade" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Baixa">Baixa</SelectItem>
+                                                <SelectItem value="Média">Média</SelectItem>
+                                                <SelectItem value="Alta">Alta</SelectItem>
+                                                <SelectItem value="Urgente">Urgente</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <Badge variant={task.priority === "Urgente" ? "destructive" : "secondary"}>
+                                            {task.priority || "Média"}
+                                        </Badge>
+                                    )}
                                 </div>
                             </div>
 
-                            {task.observations && (
-                                <div className="space-y-1.5 pt-2">
-                                    <Label className="text-xs font-bold text-muted-foreground uppercase">Observações da Tarefa</Label>
-                                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm italic text-slate-600">
-                                        {task.observations}
+                            <div className="space-y-2 pt-2">
+                                <Label className="text-xs font-bold text-muted-foreground uppercase">Observações da Tarefa</Label>
+                                {isEditingTask ? (
+                                    <Textarea
+                                        value={editedTask.observations || ""}
+                                        onChange={(e) => handleTaskFieldChange("observations", e.target.value)}
+                                        placeholder="Detalhes adicionais sobre a obrigação..."
+                                        className={cn(
+                                            "min-h-[120px] text-sm focus-visible:ring-primary/20 transition-all border-slate-200",
+                                            editedTask.observations !== task.observations && "border-primary ring-1 ring-primary/20 bg-primary/5"
+                                        )}
+                                    />
+                                ) : (
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm italic text-slate-600 leading-relaxed">
+                                        {task.observations || "Nenhuma observação registrada."}
                                     </div>
+                                )}
+                            </div>
+
+                            {isEditingTask && (
+                                <div className="flex items-center justify-end gap-3 pt-4 border-t mt-4 sticker bottom-0 bg-white pb-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            if (hasChanges && confirm("Descartar alterações?")) {
+                                                setIsEditingTask(false);
+                                                setHasChanges(false);
+                                            } else if (!hasChanges) {
+                                                setIsEditingTask(false);
+                                            }
+                                        }}
+                                        className="h-10 px-6 font-bold text-slate-500"
+                                    >
+                                        Descartar
+                                    </Button>
+                                    <Button
+                                        onClick={handleSaveTask}
+                                        disabled={isSaving || !hasChanges}
+                                        className="h-10 px-8 font-bold gap-2 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
+                                    >
+                                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                        Salvar Alterações
+                                    </Button>
                                 </div>
                             )}
                         </TabsContent>

@@ -336,6 +336,16 @@ const Kanban = () => {
     }
   };
 
+  const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
+    try {
+      await api.updateTask(taskId, updates);
+      fetchBoard();
+      toast.success("Tarefa atualizada!");
+    } catch (error: any) {
+      toast.error(`Erro ao atualizar tarefa: ${error?.message || "Servidor indisponível"}`);
+    }
+  };
+
   const handleDragStart = useCallback((e: React.DragEvent, taskId: string, columnId: string) => {
     setDragData({ taskId, fromColId: columnId });
     e.dataTransfer.effectAllowed = "move";
@@ -660,6 +670,8 @@ const Kanban = () => {
                     setDetailModalOpen(true);
                   }}
                   onConcluirClick={handleMoveToEntregue}
+                  onUpdateTask={handleUpdateTask}
+                  clients={clients}
                 />
               );
             })}
