@@ -35,11 +35,19 @@ interface TaskDetailModalProps {
     onClose: () => void;
     onUpdate: () => void;
     clients: Client[];
+    defaultTab?: "details" | "history";
 }
 
-export function TaskDetailModal({ task, isOpen, onClose, onUpdate, clients }: TaskDetailModalProps) {
+export function TaskDetailModal({ task, isOpen, onClose, onUpdate, clients, defaultTab = "details" }: TaskDetailModalProps) {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState("details");
+    const [activeTab, setActiveTab] = useState<string>(defaultTab);
+
+    // Update activeTab when defaultTab changes or modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setActiveTab(defaultTab);
+        }
+    }, [isOpen, defaultTab]);
     const [notes, setNotes] = useState<TaskNote[]>([]);
     const [loadingNotes, setLoadingNotes] = useState(false);
 

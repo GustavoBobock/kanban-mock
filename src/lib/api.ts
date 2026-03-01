@@ -28,6 +28,9 @@ export interface Task {
     notes_count?: number;
     images_count?: number;
     last_note_at?: string;
+    last_note_content?: string;
+    last_note_image?: string;
+    created_at: string;
 }
 
 export interface Column {
@@ -126,7 +129,7 @@ export const api = {
             .select(`
                 *,
                 notes_count:task_notes(count),
-                task_notes(updated_at, images)
+                task_notes(updated_at, images, content)
             `)
             .in("column_id", columns.map(c => c.id))
             .order("position");
@@ -138,15 +141,19 @@ export const api = {
             const notes = (task.task_notes as any[]) || [];
             const notesCount = (task.notes_count as any)?.[0]?.count || 0;
             const imagesCount = notes.reduce((acc, note) => acc + (note.images?.length || 0), 0);
-            const lastNoteAt = notes.length > 0
-                ? notes.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0].updated_at
-                : undefined;
+
+            const sortedNotes = [...notes].sort((a, b) =>
+                new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+            );
+            const lastNote = sortedNotes[0];
 
             return {
                 ...task,
                 notes_count: notesCount,
                 images_count: imagesCount,
-                last_note_at: lastNoteAt
+                last_note_at: lastNote?.updated_at,
+                last_note_content: lastNote?.content,
+                last_note_image: lastNote?.images?.[0]
             };
         });
 

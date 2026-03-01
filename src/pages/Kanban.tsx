@@ -142,6 +142,7 @@ const Kanban = () => {
 
   // Detail Modal state
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTaskTab, setSelectedTaskTab] = useState<"details" | "history">("details");
   const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const [isAddingColumn, setIsAddingColumn] = useState(false);
@@ -317,6 +318,21 @@ const Kanban = () => {
     } catch (error: any) {
       console.error("Erro ao excluir tarefa:", error);
       toast.error(`Erro ao excluir tarefa: ${error?.message || "Servidor indisponível"}`);
+    }
+  };
+
+  const handleMoveToEntregue = async (taskId: string) => {
+    const entregueCol = board?.columns.find(c => c.title.toLowerCase() === "entregue" || c.title.toLowerCase() === "concluído");
+    if (entregueCol) {
+      try {
+        await api.moveTask(taskId, entregueCol.id, 0); // Move para o topo
+        fetchBoard();
+        toast.success("Tarefa concluída!");
+      } catch (error) {
+        toast.error("Erro ao concluir tarefa.");
+      }
+    } else {
+      toast.error("Coluna 'Entregue' não encontrada.");
     }
   };
 
@@ -635,8 +651,15 @@ const Kanban = () => {
                   onColumnDragStart={handleColumnDragStart}
                   onTaskClick={(task) => {
                     setSelectedTask(task);
+                    setSelectedTaskTab("details");
                     setDetailModalOpen(true);
                   }}
+                  onAnotarClick={(task) => {
+                    setSelectedTask(task);
+                    setSelectedTaskTab("history");
+                    setDetailModalOpen(true);
+                  }}
+                  onConcluirClick={handleMoveToEntregue}
                 />
               );
             })}
@@ -705,6 +728,7 @@ const Kanban = () => {
           isOpen={detailModalOpen}
           onClose={() => setDetailModalOpen(false)}
           onUpdate={fetchBoard}
+          defaultTab={selectedTaskTab}
         />
       )}
 
