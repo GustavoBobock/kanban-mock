@@ -101,18 +101,36 @@ create table public.clients (
   user_id uuid references auth.users(id) on delete cascade not null,
   name text not null,
   cnpj text unique,
-  tax_regime text check (tax_regime in ('Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI')),
+  tax_regime text check (tax_regime in ('Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI', 'Autônomo')),
+  contact_name text,
   active_obligations text[] default '{}'::text[],
   email text,
   phone text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  deleted_at timestamp with time zone default null
 );
 
 alter table public.clients enable row level security;
 
-create policy "Users can manage their own clients"
-  on public.clients
-  for all
+drop policy if exists "Users can manage their own clients" on public.clients;
+
+create policy "Users can view active clients"
+  on public.clients for select
+  to authenticated
+  using (auth.uid() = user_id AND deleted_at IS NULL);
+
+create policy "Users can insert clients"
+  on public.clients for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their clients"
+  on public.clients for update
+  to authenticated
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their clients"
+  on public.clients for delete
   to authenticated
   using (auth.uid() = user_id);
   
@@ -166,3 +184,33 @@ create policy "Usuários podem deletar tarefas em seus quadros."
     join boards on boards.id = columns.board_id 
     where columns.id = tasks.column_id and boards.user_id = auth.uid() 
   ) );
+
+-- Criacao da tabela de notificacoes
+create table public.notifications (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  type text not null check (type in ('alerta', 'vencida', 'urgente', 'concluida', 'overdue', 'due_today', 'due_tomorrow', 'due_soon')),
+  title text not null,
+  message text not null,
+  read boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  task_ids uuid[]
+);
+
+alter table public.notifications enable row level security;
+
+create policy "Users can get their own notifications."
+  on public.notifications for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own notifications."
+  on public.notifications for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own notifications."
+  on public.notifications for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own notifications."
+  on public.notifications for delete
+  using (auth.uid() = user_id);

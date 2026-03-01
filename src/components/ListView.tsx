@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { type Board, type Task } from "@/lib/api";
-import { getColumnColor } from "@/components/KanbanColumn";
+import { getColumnColor } from "@/lib/kanban-colors";
 import { Button } from "@/components/ui/button";
-import { X, User, Briefcase, Calendar } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { X, User, Briefcase, Calendar, FileText, Paperclip } from "lucide-react";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   AlertDialog,
@@ -16,6 +16,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -27,6 +32,7 @@ interface ListViewProps {
   board: Board;
   onRemoveTask: (taskId: string) => void;
   onMoveTask: (taskId: string, fromColId: string, toColId: string) => void;
+  onTaskClick: (task: Task) => void;
 }
 
 function ListTaskRow({
@@ -36,6 +42,7 @@ function ListTaskRow({
   board,
   onRemoveTask,
   onMoveTask,
+  onTaskClick,
 }: {
   task: Task;
   fromColId: string;
@@ -43,22 +50,24 @@ function ListTaskRow({
   board: Board;
   onRemoveTask: (taskId: string) => void;
   onMoveTask: (taskId: string, fromColId: string, toColId: string) => void;
+  onTaskClick: (task: Task) => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
     <>
       <div
-        className="flex items-start justify-between gap-3 rounded-xl bg-card p-3 shadow-sm"
+        className="flex cursor-pointer items-start justify-between gap-3 rounded-xl bg-card p-3 shadow-sm transition-colors hover:bg-slate-50"
         style={{ borderLeft: `3px solid ${accentColor}` }}
+        onClick={() => onTaskClick(task)}
       >
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-card-foreground">{task.title}</p>
             {task.priority && (
               <span className={`text-[9px] font-bold px-1.5 rounded-full ${task.priority === "Urgente" ? "bg-red-100 text-red-700" :
-                  task.priority === "Alta" ? "bg-orange-100 text-orange-700" :
-                    "bg-slate-100 text-slate-600"
+                task.priority === "Alta" ? "bg-orange-100 text-orange-700" :
+                  "bg-slate-100 text-slate-600"
                 }`}>
                 {task.priority}
               </span>
@@ -82,6 +91,28 @@ function ListTaskRow({
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Calendar className="h-3 w-3" />
                 <span>{format(parseISO(task.due_date), "dd/MM/yyyy", { locale: ptBR })}</span>
+              </div>
+            )}
+            {task.notes_count && task.notes_count > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600">
+                    <FileText className="h-3 w-3" />
+                    <span>{task.notes_count}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-[11px]">
+                  <p>{task.notes_count} anotações registradas</p>
+                  {task.last_note_at && (
+                    <p className="text-muted-foreground text-[10px]">Última há {formatDistanceToNow(parseISO(task.last_note_at), { locale: ptBR })}</p>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {task.images_count && task.images_count > 0 && (
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-blue-500/80">
+                <Paperclip className="h-3 w-3" />
+                <span>{task.images_count}</span>
               </div>
             )}
           </div>
@@ -146,7 +177,7 @@ function ListTaskRow({
   );
 }
 
-export function ListView({ board, onRemoveTask, onMoveTask }: ListViewProps) {
+export function ListView({ board, onRemoveTask, onMoveTask, onTaskClick }: ListViewProps) {
   return (
     <div className="flex w-full flex-col gap-4">
       {board.columns.map((col, idx) => {
@@ -183,6 +214,7 @@ export function ListView({ board, onRemoveTask, onMoveTask }: ListViewProps) {
                   board={board}
                   onRemoveTask={onRemoveTask}
                   onMoveTask={onMoveTask}
+                  onTaskClick={onTaskClick}
                 />
               ))}
               {tasks.length === 0 && <p className="py-3 text-center text-xs text-muted-foreground">Sem tarefas nesta coluna.</p>}

@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
 import { type Task, type Column } from "@/lib/api";
-import { GripVertical, Trash2, X, User, Briefcase, Calendar, AlertTriangle } from "lucide-react";
-import { format, isBefore, isAfter, addDays, startOfDay, parseISO } from "date-fns";
+import { Trash2, GripVertical, X, User, Briefcase, Calendar, AlertTriangle, FileText, Paperclip } from "lucide-react";
+import { format, isBefore, isAfter, addDays, startOfDay, parseISO, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
+import { getColumnColor } from "@/lib/kanban-colors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,22 +15,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-/** Palette of soft column accent colors (HSL) */
-const COLUMN_COLORS = [
-  { bg: "hsl(250 80% 96%)", border: "hsl(250 80% 72%)", badge: "hsl(250 80% 60%)", header: "hsl(250 40% 95%)" },
-  { bg: "hsl(200 75% 95%)", border: "hsl(200 70% 58%)", badge: "hsl(200 70% 50%)", header: "hsl(200 40% 93%)" },
-  { bg: "hsl(160 60% 94%)", border: "hsl(160 65% 45%)", badge: "hsl(160 65% 40%)", header: "hsl(160 30% 93%)" },
-  { bg: "hsl(340 70% 96%)", border: "hsl(340 75% 60%)", badge: "hsl(340 75% 55%)", header: "hsl(340 40% 95%)" },
-  { bg: "hsl(40 85% 95%)", border: "hsl(40 90% 50%)", badge: "hsl(40 90% 45%)", header: "hsl(40 50% 93%)" },
-  { bg: "hsl(280 60% 96%)", border: "hsl(280 60% 62%)", badge: "hsl(280 60% 55%)", header: "hsl(280 30% 95%)" },
-  { bg: "hsl(20 80% 95%)", border: "hsl(20 80% 55%)", badge: "hsl(20 80% 50%)", header: "hsl(20 40% 93%)" },
-  { bg: "hsl(170 55% 94%)", border: "hsl(170 55% 42%)", badge: "hsl(170 55% 38%)", header: "hsl(170 30% 92%)" },
-];
-
-export function getColumnColor(index: number) {
-  return COLUMN_COLORS[index % COLUMN_COLORS.length];
-}
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface KanbanCardProps {
   task: Task;
@@ -38,9 +28,10 @@ interface KanbanCardProps {
   columnTitle: string;
   onRemove: (taskId: string) => void;
   onDragStart: (e: React.DragEvent, taskId: string, columnId: string) => void;
+  onClick: () => void;
 }
 
-export function KanbanCard({ task, columnId, accentColor, columnTitle, onRemove, onDragStart }: KanbanCardProps) {
+export function KanbanCard({ task, columnId, accentColor, columnTitle, onRemove, onDragStart, onClick }: KanbanCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const getStatusColor = () => {
@@ -61,16 +52,25 @@ export function KanbanCard({ task, columnId, accentColor, columnTitle, onRemove,
     <>
       <div
         draggable
-        onDragStart={(e) => onDragStart(e, task.id, columnId)}
-        className={`group flex cursor-grab items-start gap-2 rounded-xl border-l-[4px] bg-card p-3 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:cursor-grabbing ${statusClass}`}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          onDragStart(e, task.id, columnId);
+        }}
+        onClick={onClick}
+        className={`group flex cursor-pointer items-start gap-2 rounded-xl border-l-[4px] bg-card p-3 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 active:cursor-grabbing ${statusClass}`}
       >
         <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-start justify-between gap-2">
             <h4 className="text-sm font-bold text-card-foreground leading-tight line-clamp-2">{task.title}</h4>
-            {task.priority === "Urgente" && (
-              <Badge variant="destructive" className="h-4 px-1 text-[8px] uppercase tracking-wider">Urgente</Badge>
-            )}
+            <div className="flex items-center gap-1">
+              {task.notes_count && task.notes_count > 0 && (
+                <div className="h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse" title="Tem histórico registrado" />
+              )}
+              {task.priority === "Urgente" && (
+                <Badge variant="destructive" className="h-4 px-1 text-[8px] uppercase tracking-wider">Urgente</Badge>
+              )}
+            </div>
           </div>
 
           {(task.client_name || task.obligation_type) && (
@@ -91,12 +91,38 @@ export function KanbanCard({ task, columnId, accentColor, columnTitle, onRemove,
           )}
 
           <div className="flex items-center justify-between pt-1 border-t border-border/40">
-            {task.due_date ? (
-              <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
-                <Calendar className="h-3 w-3" />
-                {format(parseISO(task.due_date), "dd/MM/yy", { locale: ptBR })}
-              </div>
-            ) : <div />}
+            <div className="flex items-center gap-3">
+              {task.due_date && (
+                <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                  <Calendar className="h-3 w-3" />
+                  {format(parseISO(task.due_date), "dd/MM/yy", { locale: ptBR })}
+                </div>
+              )}
+
+              {task.notes_count && task.notes_count > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-blue-600">
+                      <FileText className="h-3 w-3" />
+                      {task.notes_count}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-[11px]">
+                    <p>{task.notes_count} anotações registradas</p>
+                    {task.last_note_at && (
+                      <p className="text-muted-foreground">Última há {formatDistanceToNow(parseISO(task.last_note_at), { locale: ptBR })}</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
+              {task.images_count && task.images_count > 0 && (
+                <div className="flex items-center gap-1 text-[10px] font-bold text-blue-500/80">
+                  <Paperclip className="h-3 w-3" />
+                  {task.images_count}
+                </div>
+              )}
+            </div>
 
             {task.priority && task.priority !== "Urgente" && (
               <span className={`text-[10px] font-extrabold px-1.5 rounded-full ${task.priority === "Alta" ? "bg-orange-100 text-orange-700" :
@@ -109,7 +135,10 @@ export function KanbanCard({ task, columnId, accentColor, columnTitle, onRemove,
           </div>
         </div>
         <button
-          onClick={() => setConfirmOpen(true)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirmOpen(true);
+          }}
           className="shrink-0 rounded-lg p-1 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
           title="Remover tarefa"
         >
@@ -151,6 +180,7 @@ interface KanbanColumnProps {
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, columnId: string) => void;
   onColumnDragStart: (e: React.DragEvent, columnId: string) => void;
+  onTaskClick: (task: Task) => void;
 }
 
 export function KanbanColumn({
@@ -164,6 +194,7 @@ export function KanbanColumn({
   onDragOver,
   onDrop,
   onColumnDragStart,
+  onTaskClick,
 }: KanbanColumnProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(column.title);
@@ -264,6 +295,7 @@ export function KanbanColumn({
               accentColor={colors.border}
               onRemove={onRemoveTask}
               onDragStart={onDragStart}
+              onClick={() => onTaskClick(task)}
             />
           ))}
           {tasks.length === 0 && (

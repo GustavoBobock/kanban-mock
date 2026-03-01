@@ -1,6 +1,16 @@
 
 import { supabase } from "./supabaseClient";
 
+export interface TaskNote {
+    id: string;
+    task_id: string;
+    user_id: string;
+    content: string;
+    images?: string[];
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Task {
     id: string;
     column_id: string;
@@ -15,6 +25,9 @@ export interface Task {
     competence?: string;
     priority?: string;
     observations?: string;
+    notes_count?: number;
+    images_count?: number;
+    last_note_at?: string;
 }
 
 export interface Column {
@@ -25,7 +38,7 @@ export interface Column {
     taskIds: string[]; // For compatibility with frontend logic
 }
 
-export type TaxRegime = 'Simples Nacional' | 'Lucro Presumido' | 'Lucro Real' | 'MEI';
+export type TaxRegime = 'Simples Nacional' | 'Lucro Presumido' | 'Lucro Real' | 'MEI' | 'Autônomo';
 
 export interface Client {
     id: string;
@@ -34,11 +47,14 @@ export interface Client {
     cnpj?: string;
     tax_regime?: TaxRegime;
     active_obligations: string[];
+    contact_name?: string;
     email?: string;
     phone?: string;
+    deleted_at?: string | null;
+    _reactivated?: boolean;
 }
 
-export type NotificationType = 'alerta' | 'vencida' | 'urgente' | 'concluida';
+export type NotificationType = 'alerta' | 'vencida' | 'urgente' | 'concluida' | 'overdue' | 'due_today' | 'due_tomorrow' | 'due_soon';
 
 export interface Notification {
     id: string;
@@ -104,19 +120,40 @@ export const api = {
 
         if (colsError) throw colsError;
 
-        // 3. Get Tasks
+        // 3. Get Tasks with counts
         const { data: tasks, error: tasksError } = await supabase
             .from("tasks")
-            .select("*")
+            .select(`
+                *,
+                notes_count:task_notes(count),
+                task_notes(updated_at, images)
+            `)
             .in("column_id", columns.map(c => c.id))
             .order("position");
 
         if (tasksError) throw tasksError;
 
+        const safeColumns = columns || [];
+        const transformedTasks = (tasks || []).map(task => {
+            const notes = (task.task_notes as any[]) || [];
+            const notesCount = (task.notes_count as any)?.[0]?.count || 0;
+            const imagesCount = notes.reduce((acc, note) => acc + (note.images?.length || 0), 0);
+            const lastNoteAt = notes.length > 0
+                ? notes.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0].updated_at
+                : undefined;
+
+            return {
+                ...task,
+                notes_count: notesCount,
+                images_count: imagesCount,
+                last_note_at: lastNoteAt
+            };
+        });
+
         // Transform to frontend structure
-        const formattedColumns = columns.map(col => ({
+        const formattedColumns = safeColumns.map(col => ({
             ...col,
-            taskIds: tasks.filter(t => t.column_id === col.id).map(t => t.id)
+            taskIds: transformedTasks.filter(t => t.column_id === col.id).map(t => t.id)
         }));
 
         return {
@@ -124,7 +161,7 @@ export const api = {
             user_id: board.user_id,
             title: board.title,
             columns: formattedColumns,
-            tasks: tasks,
+            tasks: transformedTasks,
         };
     },
 
@@ -192,12 +229,27 @@ export const api = {
             .from("clients")
             .select("*")
             .eq("user_id", userId)
+            .is("deleted_at", null)
             .order("name");
         if (error) throw error;
         return data || [];
     },
 
     addClient: async (client: Omit<Client, 'id' | 'created_at'>) => {
+        if (client.cnpj) {
+            const { data: updated } = await supabase
+                .from('clients')
+                .update({ ...client, deleted_at: null })
+                .eq('cnpj', client.cnpj)
+                .not('deleted_at', 'is', null)
+                .select()
+                .maybeSingle();
+
+            if (updated) {
+                return { ...updated, _reactivated: true };
+            }
+        }
+
         const { data, error } = await supabase
             .from("clients")
             .insert(client)
@@ -218,7 +270,7 @@ export const api = {
     deleteClient: async (clientId: string) => {
         const { error } = await supabase
             .from("clients")
-            .delete()
+            .update({ deleted_at: new Date().toISOString() })
             .eq("id", clientId);
         if (error) throw error;
     },
@@ -234,10 +286,10 @@ export const api = {
         return data || [];
     },
 
-    addNotification: async (notification: Omit<Notification, 'id' | 'created_at' | 'read'>) => {
+    addNotification: async (notification: Omit<Notification, 'id' | 'created_at'>) => {
         const { data, error } = await supabase
             .from("notifications")
-            .insert({ ...notification, read: false })
+            .insert(notification)
             .select()
             .single();
         if (error) throw error;
@@ -272,4 +324,59 @@ export const api = {
             .lt("created_at", ninetyDaysAgo.toISOString());
         if (error) throw error;
     },
+
+    // Task Notes Methods
+    getTaskNotes: async (taskId: string): Promise<TaskNote[]> => {
+        const { data, error } = await supabase
+            .from("task_notes")
+            .select("*")
+            .eq("task_id", taskId)
+            .order("created_at", { ascending: false });
+        if (error) throw error;
+        return data || [];
+    },
+
+    addTaskNote: async (taskId: string, userId: string, content: string, images: string[] = []) => {
+        const { data, error } = await supabase
+            .from("task_notes")
+            .insert({ task_id: taskId, user_id: userId, content, images })
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    },
+
+    updateTaskNote: async (noteId: string, updates: Partial<TaskNote>) => {
+        const { error } = await supabase
+            .from("task_notes")
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq("id", noteId);
+        if (error) throw error;
+    },
+
+    deleteTaskNote: async (noteId: string) => {
+        const { error } = await supabase
+            .from("task_notes")
+            .delete()
+            .eq("id", noteId);
+        if (error) throw error;
+    },
+
+    uploadTaskImage: async (file: File): Promise<string> => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+        const filePath = `tasks/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('task-images')
+            .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+            .from('task-images')
+            .getPublicUrl(filePath);
+
+        return data.publicUrl;
+    }
 };

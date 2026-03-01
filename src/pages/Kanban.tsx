@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { api, type Board, type Column, type Task, type Client } from "@/lib/api";
 import { KanbanColumn } from "@/components/KanbanColumn";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { ListView } from "@/components/ListView";
+import { ClientSidebar } from "@/components/ClientSidebar";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +44,9 @@ const Kanban = () => {
     const raw = localStorage.getItem(viewModeStorageKey);
     return raw === "list" || raw === "kanban" ? raw : "kanban";
   });
+  const [searchParams, setSearchParams] = useSearchParams();
+  // CRM Data
+  const [clients, setClients] = useState<Client[]>([]);
 
   const fetchBoard = useCallback(async () => {
     if (!user) return;
@@ -93,6 +98,19 @@ const Kanban = () => {
     localStorage.setItem(viewModeStorageKey, viewMode);
   }, [viewMode, viewModeStorageKey]);
 
+  // Hook into URL Params
+  useEffect(() => {
+    const clientIdParam = searchParams.get('client_id');
+    if (clientIdParam && clients.length > 0) {
+      setFilterClientId(clientIdParam);
+      const clientName = clients.find(c => c.id === clientIdParam)?.name || "Cliente";
+      toast.info(`Filtrando tarefas de ${clientName}`);
+
+      searchParams.delete('client_id');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, clients, setSearchParams]);
+
   // New column dialog
   const [colDialogOpen, setColDialogOpen] = useState(false);
   const [newColTitle, setNewColTitle] = useState("");
@@ -111,9 +129,6 @@ const Kanban = () => {
   const [newTaskPriority, setNewTaskPriority] = useState("Média");
   const [newTaskObs, setNewTaskObs] = useState("");
 
-  // CRM Data
-  const [clients, setClients] = useState<Client[]>([]);
-
   // Filters
   const [filterClientId, setFilterClientId] = useState("all");
   const [filterClient, setFilterClient] = useState("");
@@ -124,6 +139,10 @@ const Kanban = () => {
   // Drag state
   const [dragData, setDragData] = useState<{ taskId: string; fromColId: string } | null>(null);
   const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
+
+  // Detail Modal state
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [inlineColTitle, setInlineColTitle] = useState("");
@@ -145,8 +164,9 @@ const Kanban = () => {
       setIsAddingColumn(false);
       fetchBoard();
       toast.success("Coluna criada!");
-    } catch (error) {
-      toast.error("Erro ao criar coluna.");
+    } catch (error: any) {
+      console.error("Erro ao criar coluna:", error);
+      toast.error(`Erro ao criar coluna: ${error?.message || "Falha de comunicação com o Supabase"}`);
     }
   };
 
@@ -159,8 +179,10 @@ const Kanban = () => {
       const selectedClient = clients.find(c => c.id === newTaskClientId);
       const clientName = selectedClient ? selectedClient.name : newTaskClient.trim();
 
+      const finalClientId = (newTaskClientId && newTaskClientId !== "none") ? newTaskClientId : undefined;
+
       await api.addTask(newTaskColId, newTaskTitle.trim(), newTaskDesc.trim() || undefined, position, {
-        client_id: newTaskClientId || undefined,
+        client_id: finalClientId,
         client_name: clientName,
         client_cnpj: newTaskCnpj.trim() || selectedClient?.cnpj,
         obligation_type: newTaskObligation,
@@ -183,8 +205,16 @@ const Kanban = () => {
       setTaskDialogOpen(false);
       fetchBoard();
       toast.success("Tarefa criada!");
-    } catch (error) {
-      toast.error("Erro ao criar tarefa.");
+    } catch (error: any) {
+      console.error("Erro completo ao criar tarefa:", error);
+      const msg = error?.message || "";
+      if (msg.includes("uuid")) {
+        toast.error("Erro: Identificador de cliente inválido.");
+      } else if (msg.includes("not-null") || msg.includes("null value")) {
+        toast.error("Erro: Preencha todos os campos obrigatórios.");
+      } else {
+        toast.error(`Falha ao criar tarefa: ${msg || "Erro desconhecido no servidor"}`);
+      }
     }
   };
 
@@ -262,8 +292,9 @@ const Kanban = () => {
       await api.deleteColumn(colId);
       fetchBoard();
       toast.success("Coluna excluída.");
-    } catch (error) {
-      toast.error("Erro ao excluir coluna.");
+    } catch (error: any) {
+      console.error("Erro ao excluir coluna:", error);
+      toast.error(`Erro ao excluir coluna: ${error?.message || "Servidor indisponível"}`);
     }
   };
 
@@ -271,8 +302,9 @@ const Kanban = () => {
     try {
       await api.updateColumn(colId, { title });
       fetchBoard();
-    } catch (error) {
-      toast.error("Erro ao renomear coluna.");
+    } catch (error: any) {
+      console.error("Erro ao renomear coluna:", error);
+      toast.error(`Erro ao renomear coluna: ${error?.message || "Servidor indisponível"}`);
     }
   };
 
@@ -282,8 +314,9 @@ const Kanban = () => {
       await api.deleteTask(taskId);
       fetchBoard();
       toast.success("Tarefa excluída.");
-    } catch (error) {
-      toast.error("Erro ao excluir tarefa.");
+    } catch (error: any) {
+      console.error("Erro ao excluir tarefa:", error);
+      toast.error(`Erro ao excluir tarefa: ${error?.message || "Servidor indisponível"}`);
     }
   };
 
@@ -430,6 +463,8 @@ const Kanban = () => {
               Clientes (CRM)
             </Link>
           </Button>
+
+          <ClientSidebar clients={clients} />
 
           <Button
             variant="outline"
@@ -598,6 +633,10 @@ const Kanban = () => {
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
                   onColumnDragStart={handleColumnDragStart}
+                  onTaskClick={(task) => {
+                    setSelectedTask(task);
+                    setDetailModalOpen(true);
+                  }}
                 />
               );
             })}
@@ -649,10 +688,25 @@ const Kanban = () => {
               board={filteredBoard}
               onRemoveTask={handleRemoveTask}
               onMoveTask={handleMoveTaskFromList}
+              onTaskClick={(task) => {
+                setSelectedTask(task);
+                setDetailModalOpen(true);
+              }}
             />
           </main>
         );
       })()}
+
+      {/* Task detail & history modal */}
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          clients={clients}
+          isOpen={detailModalOpen}
+          onClose={() => setDetailModalOpen(false)}
+          onUpdate={fetchBoard}
+        />
+      )}
 
       {/* New column dialog */}
       <Dialog open={colDialogOpen} onOpenChange={setColDialogOpen}>
@@ -674,7 +728,7 @@ const Kanban = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleAddColumn} disabled={!newColTitle.trim()}>
+            <Button onClick={() => handleAddColumn()} disabled={!newColTitle.trim()}>
               Criar
             </Button>
           </DialogFooter>

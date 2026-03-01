@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { api, type Client, type TaxRegime } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -28,11 +28,11 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { LayoutDashboard, Users, Plus, Upload, Trash2, Edit, Search, FileText } from "lucide-react";
+import { LayoutDashboard, Users, Plus, Upload, Trash2, Edit, Search, FileText, ExternalLink, AlertTriangle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { ImportCSVModal } from "@/components/ImportCSVModal";
 
-const TAX_REGIMES: TaxRegime[] = ['Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI'];
+const TAX_REGIMES: TaxRegime[] = ['Simples Nacional', 'Lucro Presumido', 'Lucro Real', 'MEI', 'Autônomo'];
 
 interface ObligationInfo {
     id: string;
@@ -58,7 +58,9 @@ const OBLIGATION_METADATA: ObligationInfo[] = [
 
 const Clientes = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [clients, setClients] = useState<Client[]>([]);
+    const [clientTasksMap, setClientTasksMap] = useState<Record<string, 'overdue' | 'soon' | 'ok'>>({});
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
 
@@ -69,6 +71,7 @@ const Clientes = () => {
 
     // Form state
     const [name, setName] = useState("");
+    const [contactName, setContactName] = useState("");
     const [cnpj, setCnpj] = useState("");
     const [regime, setRegime] = useState<TaxRegime>('Simples Nacional');
     const [email, setEmail] = useState("");
@@ -82,6 +85,37 @@ const Clientes = () => {
     const fetchClients = async () => {
         try {
             const data = await api.getClients(user!.id);
+            const board = await api.getBoard(user!.id);
+
+            let statusMap: Record<string, 'overdue' | 'soon' | 'ok'> = {};
+            if (board?.tasks) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const in3Days = new Date(today);
+                in3Days.setDate(today.getDate() + 3);
+
+                const entregueColId = board.columns.find(c => c.title.toLowerCase() === 'entregue')?.id;
+
+                board.tasks.forEach(t => {
+                    if (t.column_id === entregueColId || !t.client_id || !t.due_date) return;
+
+                    const due = new Date(t.due_date + 'T00:00:00');
+                    let taskStatus: 'overdue' | 'soon' | 'ok' = 'ok';
+                    if (due < today) taskStatus = 'overdue';
+                    else if (due <= in3Days) taskStatus = 'soon';
+
+                    const currStatus = statusMap[t.client_id];
+                    if (taskStatus === 'overdue') {
+                        statusMap[t.client_id] = 'overdue';
+                    } else if (taskStatus === 'soon' && currStatus !== 'overdue') {
+                        statusMap[t.client_id] = 'soon';
+                    } else if (!currStatus) {
+                        statusMap[t.client_id] = 'ok';
+                    }
+                });
+            }
+
+            setClientTasksMap(statusMap);
             setClients(data);
         } catch (error) {
             toast.error("Erro ao carregar clientes.");
@@ -92,6 +126,7 @@ const Clientes = () => {
 
     const resetForm = () => {
         setName("");
+        setContactName("");
         setCnpj("");
         setRegime('Simples Nacional');
         setEmail("");
@@ -106,10 +141,11 @@ const Clientes = () => {
         const clientData = {
             user_id: user.id,
             name,
-            cnpj,
+            contact_name: contactName || null,
+            cnpj: cnpj || null,
             tax_regime: regime,
-            email,
-            phone,
+            email: email || null,
+            phone: phone || null,
             active_obligations: selectedObligations,
         };
 
@@ -118,20 +154,27 @@ const Clientes = () => {
                 await api.updateClient(editingClient.id, clientData);
                 toast.success("Cliente atualizado!");
             } else {
-                await api.addClient(clientData);
-                toast.success("Cliente cadastrado!");
+                const res = await api.addClient(clientData);
+                if (res._reactivated) {
+                    toast.success("Cliente reativado com sucesso!");
+                } else {
+                    toast.success("Cliente cadastrado!");
+                }
             }
             setDialogOpen(false);
             resetForm();
             fetchClients();
-        } catch (error) {
-            toast.error("Erro ao salvar cliente.");
+        } catch (error: any) {
+            console.error("Erro ao salvar cliente:", error);
+            const msg = error?.message || error?.details || "Erro desconhecido";
+            toast.error(`Erro ao salvar cliente: ${msg}`);
         }
     };
 
     const handleEdit = (client: Client) => {
         setEditingClient(client);
         setName(client.name);
+        setContactName(client.contact_name || "");
         setCnpj(client.cnpj || "");
         setRegime(client.tax_regime || 'Simples Nacional');
         setEmail(client.email || "");
@@ -166,7 +209,9 @@ const Clientes = () => {
                     </div>
                     <div>
                         <h1 className="text-xl font-bold text-slate-900 leading-none">Gestão de Clientes</h1>
-                        <p className="mt-1 text-xs text-muted-foreground uppercase tracking-wider font-semibold">Carteira Contábil</p>
+                        <p className="mt-1 text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                            Carteira Contábil • {filteredClients.length} Ativo{filteredClients.length !== 1 && "s"}
+                        </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -204,6 +249,7 @@ const Clientes = () => {
                             <TableHeader>
                                 <TableRow className="bg-slate-50/50">
                                     <TableHead className="font-bold">Nome</TableHead>
+                                    <TableHead className="font-bold">Responsável</TableHead>
                                     <TableHead className="font-bold">CNPJ</TableHead>
                                     <TableHead className="font-bold">Regime</TableHead>
                                     <TableHead className="font-bold">Obrigações</TableHead>
@@ -220,39 +266,64 @@ const Clientes = () => {
                                         <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">Nenhum cliente encontrado.</TableCell>
                                     </TableRow>
                                 ) : (
-                                    filteredClients.map((client) => (
-                                        <TableRow key={client.id} className="hover:bg-slate-50/50 transition-colors">
-                                            <TableCell className="font-medium text-slate-700">{client.name}</TableCell>
-                                            <TableCell className="text-slate-600 font-mono text-xs">{client.cnpj || "-"}</TableCell>
-                                            <TableCell>
-                                                <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-100">
-                                                    {client.tax_regime}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {client.active_obligations?.slice(0, 3).map(ob => (
-                                                        <span key={ob} className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-semibold border">
-                                                            {ob}
-                                                        </span>
-                                                    ))}
-                                                    {client.active_obligations?.length > 3 && (
-                                                        <span className="text-[9px] text-muted-foreground">+{client.active_obligations.length - 3}</span>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-1">
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEdit(client)}>
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => handleDelete(client.id)}>
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                                    filteredClients.map((client) => {
+                                        const cStatus = clientTasksMap[client.id];
+                                        const rowClass = cStatus === 'overdue'
+                                            ? 'bg-red-50 hover:bg-red-100/50'
+                                            : cStatus === 'soon'
+                                                ? 'bg-yellow-50 hover:bg-yellow-100/50'
+                                                : 'hover:bg-slate-50/50';
+
+                                        return (
+                                            <TableRow key={client.id} className={`${rowClass} transition-colors`}>
+                                                <TableCell className="font-medium text-slate-700">
+                                                    <div className="flex items-center gap-2">
+                                                        {client.name}
+                                                        {cStatus === 'overdue' && <span title="Tarefas atrasadas!"><AlertTriangle className="h-4 w-4 text-red-500" /></span>}
+                                                        {cStatus === 'soon' && <span title="Tarefas vencendo em 3 dias"><Clock className="h-4 w-4 text-yellow-500" /></span>}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-slate-600 text-sm">{client.contact_name || "-"}</TableCell>
+                                                <TableCell className="text-slate-600 font-mono text-xs">{client.cnpj || "-"}</TableCell>
+                                                <TableCell>
+                                                    <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-100">
+                                                        {client.tax_regime}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {client.active_obligations?.slice(0, 3).map(ob => (
+                                                            <span key={ob} className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-semibold border">
+                                                                {ob}
+                                                            </span>
+                                                        ))}
+                                                        {client.active_obligations?.length > 3 && (
+                                                            <span className="text-[9px] text-muted-foreground">+{client.active_obligations.length - 3}</span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-primary/70 hover:text-primary hover:bg-primary/10"
+                                                            title="Ver tarefas no Kanban"
+                                                            onClick={() => navigate(`/kanban?client_id=${client.id}`)}
+                                                        >
+                                                            <ExternalLink className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEdit(client)} title="Editar cliente">
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => handleDelete(client.id)} title="Remover cliente">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })
                                 )}
                             </TableBody>
                         </Table>
@@ -267,13 +338,17 @@ const Clientes = () => {
                         <DialogTitle className="text-xl font-bold">{editingClient ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
                     </DialogHeader>
                     <div className="grid gap-6 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Nome da Empresa</Label>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="space-y-2 col-span-1">
+                                <Label htmlFor="name">Nome / Empresa</Label>
                                 <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Contábil Ltda" />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="cnpj">CNPJ</Label>
+                            <div className="space-y-2 col-span-1">
+                                <Label htmlFor="contact_name">Responsável</Label>
+                                <Input id="contact_name" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Nome do Responsável" />
+                            </div>
+                            <div className="space-y-2 col-span-1">
+                                <Label htmlFor="cnpj">CNPJ / CPF</Label>
                                 <Input id="cnpj" value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
                             </div>
                         </div>

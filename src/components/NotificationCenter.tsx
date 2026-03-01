@@ -25,6 +25,7 @@ import { api, type Notification, type NotificationType } from "@/lib/api";
 import { toast } from "sonner";
 import { format, isToday, isTomorrow, isBefore, parseISO, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { checkAndGenerateNotifications } from "@/lib/notifications";
 
 export const NotificationCenter = ({ boardTasks = [] }: { boardTasks?: any[] }) => {
     const { user } = useAuth();
@@ -55,55 +56,60 @@ export const NotificationCenter = ({ boardTasks = [] }: { boardTasks?: any[] }) 
         // Para fins deste exercício, vamos usar o check de automação
     }, [fetchNotifications]);
 
-    // Lógica de Automação (08:00 e 17:00)
+    // Lógica de Automação (Ao carregar e a cada 60 minutos)
     useEffect(() => {
-        if (!user || boardTasks.length === 0) return;
+        if (!user) return;
 
-        const checkAutomations = async () => {
+        const runAutomations = async () => {
             const now = new Date();
             const hours = now.getHours();
             const minutes = now.getMinutes();
+            const day = now.getDay();
+            const isBusinessDay = day >= 1 && day <= 5;
             const dateStr = format(now, "yyyy-MM-dd");
 
-            // Check 08:00 - Tarefas de Hoje e Amanhã
-            const lastCheck08 = localStorage.getItem(`last_check_08_${user.id}`);
-            if (hours === 8 && minutes === 0 && lastCheck08 !== dateStr) {
-                const todayTasks = boardTasks.filter(t => t.due_date && isToday(parseISO(t.due_date)));
-                const tomorrowTasks = boardTasks.filter(t => t.due_date && isTomorrow(parseISO(t.due_date)));
+            // Roda a checagem que valida overdue, soon, today (ignora tarefas entregues etc)
+            await checkAndGenerateNotifications(user.id);
+            fetchNotifications();
 
-                if (todayTasks.length > 0 || tomorrowTasks.length > 0) {
-                    const message = `${todayTasks.length} vencem hoje e ${tomorrowTasks.length} vencem amanhã.`;
-                    await sendNotification('alerta', "Resumo da Manhã", message, [...todayTasks, ...tomorrowTasks].map(t => t.id));
+            // Lógica isolada para envios de Resumo (08:00 e 17:00 em dias úteis)
+            if (isBusinessDay) {
+                const lastCheck08 = localStorage.getItem(`last_check_08_${user.id}`);
+                if (hours === 8 && minutes === 0 && lastCheck08 !== dateStr) {
+                    const todayTasks = boardTasks.filter(t => t.due_date && isToday(parseISO(t.due_date)));
+                    if (todayTasks.length > 0) {
+                        await sendNotification('alerta', "Resumo da Manhã", `${todayTasks.length} vencem hoje.`, todayTasks.map(t => t.id));
+                    }
+                    localStorage.setItem(`last_check_08_${user.id}`, dateStr);
                 }
-                localStorage.setItem(`last_check_08_${user.id}`, dateStr);
-            }
 
-            // Check 17:00 - Resumo do Dia
-            const lastCheck17 = localStorage.getItem(`last_check_17_${user.id}`);
-            if (hours === 17 && minutes === 0 && lastCheck17 !== dateStr) {
-                const total = boardTasks.length;
-                const overdue = boardTasks.filter(t => t.due_date && isBefore(parseISO(t.due_date), startOfDay(now))).length;
-                const message = `Você tem ${total} tarefas no quadro, ${overdue} estão atrasadas.`;
-                await sendNotification('alerta', "Resumo do Dia", message);
-                localStorage.setItem(`last_check_17_${user.id}`, dateStr);
-            }
-
-            // Check Vencidas em tempo real
-            const overdueTasks = boardTasks.filter(t => {
-                if (!t.due_date) return false;
-                const dueDate = parseISO(t.due_date);
-                return isBefore(dueDate, startOfDay(now)) && !localStorage.getItem(`notified_overdue_${t.id}`);
-            });
-
-            for (const task of overdueTasks) {
-                await sendNotification('vencida', "Tarefa Vencida!", `A tarefa "${task.title}" do cliente ${task.client_name || 'N/A'} venceu.`, [task.id]);
-                localStorage.setItem(`notified_overdue_${task.id}`, 'true');
+                const lastCheck17 = localStorage.getItem(`last_check_17_${user.id}`);
+                if (hours === 17 && minutes === 0 && lastCheck17 !== dateStr) {
+                    const overdue = boardTasks.filter(t => t.due_date && isBefore(parseISO(t.due_date), startOfDay(now))).length;
+                    if (overdue > 0) {
+                        await sendNotification('alerta', "Resumo do Fim do Dia", `Você tem ${overdue} atrasadas.`, []);
+                    }
+                    localStorage.setItem(`last_check_17_${user.id}`, dateStr);
+                }
             }
         };
 
-        const interval = setInterval(checkAutomations, 60000); // Check a cada minuto
-        return () => clearInterval(interval);
-    }, [user, boardTasks]);
+        // Roda na montagem (usuário entrou)
+        runAutomations();
+
+        // Timer de 60 minutos em ms, e loop 1 seg para pegar 08h e 17h precisos
+        const checkTimer = setInterval(runAutomations, 60000);
+
+        return () => clearInterval(checkTimer);
+    }, [user, boardTasks, fetchNotifications]);
+
+    const handleOpenChange = async (open: boolean) => {
+        setIsOpen(open);
+        if (open && user) {
+            await checkAndGenerateNotifications(user.id);
+            fetchNotifications();
+        }
+    };
 
     const sendNotification = async (type: NotificationType, title: string, message: string, taskIds?: string[]) => {
         if (!user) return;
@@ -113,7 +119,8 @@ export const NotificationCenter = ({ boardTasks = [] }: { boardTasks?: any[] }) 
                 type,
                 title,
                 message,
-                task_ids: taskIds
+                task_ids: taskIds,
+                read: false
             });
 
             // Notificação Nativa
@@ -160,15 +167,19 @@ export const NotificationCenter = ({ boardTasks = [] }: { boardTasks?: any[] }) 
 
     const getIcon = (type: NotificationType) => {
         switch (type) {
-            case 'vencida': return <AlertCircle className="h-5 w-5 text-red-500" />;
+            case 'vencida':
+            case 'overdue': return <AlertCircle className="h-5 w-5 text-red-500" />;
+            case 'due_today': return <Clock className="h-5 w-5 text-yellow-500" />;
+            case 'due_tomorrow': return <Calendar className="h-5 w-5 text-orange-500" />;
+            case 'due_soon': return <Clock className="h-5 w-5 text-blue-500" />;
             case 'urgente': return <Clock className="h-5 w-5 text-amber-500" />;
             case 'concluida': return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-            default: return <Calendar className="h-5 w-5 text-blue-500" />;
+            default: return <Bell className="h-5 w-5 text-blue-500" />;
         }
     };
 
     return (
-        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+        <Sheet open={isOpen} onOpenChange={handleOpenChange}>
             <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative text-white/80 hover:text-white hover:bg-white/10">
                     <Bell className="h-5 w-5" />
