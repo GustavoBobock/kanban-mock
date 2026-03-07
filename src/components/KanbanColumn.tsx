@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { type Task, type Column, type Client } from "@/lib/api";
 import {
   format,
@@ -101,7 +101,7 @@ interface KanbanCardProps {
   clients: Client[];
 }
 
-export function KanbanCard({
+export const KanbanCard = memo(function KanbanCard({
   task,
   columnId,
   accentColor,
@@ -648,7 +648,7 @@ export function KanbanCard({
       </AlertDialog>
     </ErrorBoundary>
   );
-}
+});
 
 interface KanbanColumnProps {
 
@@ -669,7 +669,7 @@ interface KanbanColumnProps {
   clients: Client[];
 }
 
-export function KanbanColumn({
+export const KanbanColumn = memo(function KanbanColumn({
   column,
   tasks,
   colorIndex,
@@ -792,4 +792,4 @@ export function KanbanColumn({
       </div>
     </div>
   );
-}
+});

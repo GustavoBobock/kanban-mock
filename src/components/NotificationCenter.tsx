@@ -51,12 +51,9 @@ export const NotificationCenter = ({ boardTasks = [] }: { boardTasks?: any[] }) 
         if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
         }
+    }, [user.id]); // Apenas no login/troca de user
 
-        // Supabase Realtime - Opcional, mas podemos simular com polling se preferir
-        // Para fins deste exercício, vamos usar o check de automação
-    }, [fetchNotifications]);
-
-    // Lógica de Automação (Ao carregar e a cada 60 minutos)
+    // Lógica de Automação (Menos agressiva)
     useEffect(() => {
         if (!user) return;
 
@@ -68,7 +65,7 @@ export const NotificationCenter = ({ boardTasks = [] }: { boardTasks?: any[] }) 
             const isBusinessDay = day >= 1 && day <= 5;
             const dateStr = format(now, "yyyy-MM-dd");
 
-            // Roda a checagem que valida overdue, soon, today (ignora tarefas entregues etc)
+            // Roda a checagem que valida overdue, soon, today
             await checkAndGenerateNotifications(user.id);
             fetchNotifications();
 
@@ -94,14 +91,14 @@ export const NotificationCenter = ({ boardTasks = [] }: { boardTasks?: any[] }) 
             }
         };
 
-        // Roda na montagem (usuário entrou)
+        // Roda inicialmente
         runAutomations();
 
-        // Timer de 60 minutos em ms, e loop 1 seg para pegar 08h e 17h precisos
-        const checkTimer = setInterval(runAutomations, 60000);
+        // Check a cada 5 minutos em vez de 1 minuto para poupar conexões e CPU
+        const checkTimer = setInterval(runAutomations, 5 * 60000);
 
         return () => clearInterval(checkTimer);
-    }, [user, boardTasks, fetchNotifications]);
+    }, [user.id]); // Remover boardTasks e fetchNotifications das dependências diretas para evitar loop
 
     const handleOpenChange = async (open: boolean) => {
         setIsOpen(open);
