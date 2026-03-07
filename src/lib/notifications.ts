@@ -48,13 +48,13 @@ export async function checkAndGenerateNotifications(userId: string) {
             }
 
             if (type) {
-                // Check if we already notified for this exact task status
+                // Deduplica por (task_id, type): não cria nova notif se já existe
+                // uma NÃO LIDA para o mesmo par — independente de data.
+                // Assim tarefas overdue não acumulam 1 notif por dia.
                 const alreadyNotified = existingNotifs.some(n =>
                     n.type === type &&
                     n.task_ids?.includes(task.id) &&
-                    // To prevent infinite spam if the user never clears them, check if they got notified today
-                    // or just check if it already exists basically (notifications are persistent until deleted usually)
-                    new Date(n.created_at) >= today
+                    !n.read
                 );
 
                 if (!alreadyNotified) {

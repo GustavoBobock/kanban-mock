@@ -48,15 +48,16 @@ const Kanban = () => {
   // CRM Data
   const [clients, setClients] = useState<Client[]>([]);
 
-  const fetchBoard = useCallback(async () => {
+  // silent=true → não altera o estado de loading (usado em refreshes de background)
+  // silent=false (padrão) → mostra spinner durante o carregamento inicial
+  const fetchBoard = useCallback(async (silent = false) => {
     if (!user) return;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await api.getBoard(user.id);
 
       // Migration of legacy columns
       let columns = data?.columns || [];
-      let tasks = data?.tasks || [];
       let updated = false;
 
       const migrationMap: Record<string, string> = {
@@ -74,16 +75,15 @@ const Kanban = () => {
       }
 
       if (updated) {
-        // Fetch again to get updated state if needed, or just update local
         setBoard({ ...data!, columns });
       } else {
         setBoard(data);
       }
     } catch (error) {
       console.error("Error fetching board:", error);
-      toast.error("Erro ao carregar o quadro.");
+      if (!silent) toast.error("Erro ao carregar o quadro.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [user]);
 
@@ -148,6 +148,22 @@ const Kanban = () => {
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [inlineColTitle, setInlineColTitle] = useState("");
 
+  const maskCNPJ = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    return digits
+      .replace(/^(\d{2})(\d)/, "$1.$2")
+      .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1/$2")
+      .replace(/(\d{4})(\d)/, "$1-$2")
+      .substring(0, 18);
+  };
+
+  const maskCompetence = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length <= 2) return digits;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 6)}`.substring(0, 7);
+  };
+
   const handleLogout = async () => {
     await signOut();
     navigate("/login", { replace: true });
@@ -172,7 +188,15 @@ const Kanban = () => {
   };
 
   const handleAddTask = async () => {
-    if (!newTaskTitle.trim() || !newTaskColId || !board) return;
+    if (!newTaskTitle.trim()) {
+      toast.error("Informe o título da tarefa.");
+      return;
+    }
+    if (!newTaskColId) {
+      toast.error("Selecione uma coluna para a tarefa.");
+      return;
+    }
+    if (!board) return;
     try {
       const col = board.columns.find(c => c.id === newTaskColId);
       const position = col ? col.taskIds.length : 0;
@@ -204,18 +228,11 @@ const Kanban = () => {
       setNewTaskPriority("Média");
       setNewTaskObs("");
       setTaskDialogOpen(false);
-      fetchBoard();
+      await fetchBoard();
       toast.success("Tarefa criada!");
     } catch (error: any) {
       console.error("Erro completo ao criar tarefa:", error);
-      const msg = error?.message || "";
-      if (msg.includes("uuid")) {
-        toast.error("Erro: Identificador de cliente inválido.");
-      } else if (msg.includes("not-null") || msg.includes("null value")) {
-        toast.error("Erro: Preencha todos os campos obrigatórios.");
-      } else {
-        toast.error(`Falha ao criar tarefa: ${msg || "Erro desconhecido no servidor"}`);
-      }
+      toast.error("Erro ao criar tarefa. Verifique os campos.");
     }
   };
 
@@ -393,16 +410,57 @@ const Kanban = () => {
       if (!dragData || !board) return;
       const { taskId, fromColId } = dragData;
 
-      // Optimistic update logic could go here, but for simplicity we just API call and refresh
-      // Calculate new position (append to end for now)
+      if (fromColId === toColId) {
+        setDragData(null);
+        return;
+      }
+
       const toCol = board.columns.find((c) => c.id === toColId);
       const newPosition = toCol ? toCol.taskIds.length : 0;
 
+      // Salva o estado original para realizar rollback visual em caso de erro
+      const originalBoard = { ...board };
+
+      // Update Otimista Instantâneo do Board
+      setBoard(prev => {
+        if (!prev) return prev;
+        try {
+          const newBoard = { ...prev, columns: [...prev.columns], tasks: [...prev.tasks] };
+
+          const fromColIdx = newBoard.columns.findIndex(c => c.id === fromColId);
+          const toColIdx = newBoard.columns.findIndex(c => c.id === toColId);
+
+          if (fromColIdx >= 0 && toColIdx >= 0) {
+            newBoard.columns[fromColIdx] = {
+              ...newBoard.columns[fromColIdx],
+              taskIds: newBoard.columns[fromColIdx].taskIds.filter(id => id !== taskId)
+            };
+
+            newBoard.columns[toColIdx] = {
+              ...newBoard.columns[toColIdx],
+              taskIds: [...newBoard.columns[toColIdx].taskIds, taskId]
+            };
+
+            // Atualiza também a column_id da task em board.tasks
+            newBoard.tasks = newBoard.tasks.map(t =>
+              t.id === taskId ? { ...t, column_id: toColId } : t
+            );
+          }
+          return newBoard;
+        } catch {
+          return prev; // rollback silencioso se o update otimista falhar
+        }
+      });
+
       try {
         await api.moveTask(taskId, toColId, newPosition);
-        fetchBoard();
+        // Refresh silencioso: a atualização otimista já atualizou a UI corretamente.
+        // Usar silent=true para NÃO disparar setLoading(true), que causava tela branca.
+        fetchBoard(true);
       } catch (error) {
-        toast.error("Erro ao mover tarefa.");
+        console.error("Erro exato ao mover tarefa no Supabase:", error);
+        toast.error("Erro ao mover tarefa. Tente novamente.");
+        setBoard(originalBoard); // rollback visual
       }
       setDragData(null);
     },
@@ -412,14 +470,48 @@ const Kanban = () => {
   const handleMoveTaskFromList = useCallback(
     async (taskId: string, fromColId: string, toColId: string) => {
       // similar logic to drop
-      if (!board) return;
+      if (!board || !fromColId) return;
+
+      if (fromColId === toColId) return;
+
       const toCol = board.columns.find((c) => c.id === toColId);
       const newPosition = toCol ? toCol.taskIds.length : 0;
+
+      const originalBoard = { ...board };
+
+      setBoard(prev => {
+        if (!prev) return prev;
+        const newBoard = { ...prev, columns: [...prev.columns], tasks: [...prev.tasks] };
+
+        const fromColIdx = newBoard.columns.findIndex(c => c.id === fromColId);
+        const toColIdx = newBoard.columns.findIndex(c => c.id === toColId);
+
+        if (fromColIdx >= 0 && toColIdx >= 0) {
+          newBoard.columns[fromColIdx] = {
+            ...newBoard.columns[fromColIdx],
+            taskIds: newBoard.columns[fromColIdx].taskIds.filter(id => id !== taskId)
+          };
+
+          newBoard.columns[toColIdx] = {
+            ...newBoard.columns[toColIdx],
+            taskIds: [...newBoard.columns[toColIdx].taskIds, taskId]
+          };
+
+          newBoard.tasks = newBoard.tasks.map(t =>
+            t.id === taskId ? { ...t, column_id: toColId } : t
+          );
+        }
+        return newBoard;
+      });
+
       try {
         await api.moveTask(taskId, toColId, newPosition);
-        fetchBoard();
+        // Refresh silencioso: sem tela branca ao mover da lista
+        fetchBoard(true);
       } catch (error) {
-        toast.error("Erro ao mover tarefa.");
+        console.error("Erro exato ao mover tarefa da lista no Supabase:", error);
+        toast.error("Erro ao mover tarefa. Tente novamente.");
+        setBoard(originalBoard); // rollback
       }
     },
     [board, fetchBoard]
@@ -821,8 +913,9 @@ const Kanban = () => {
                 className="col-span-3"
                 placeholder="00.000.000/0000-00"
                 value={newTaskCnpj}
-                onChange={(e) => setNewTaskCnpj(e.target.value)}
+                onChange={(e) => setNewTaskCnpj(maskCNPJ(e.target.value))}
               />
+
             </div>
 
             <div className="grid grid-cols-4 items-center gap-4">
@@ -857,8 +950,9 @@ const Kanban = () => {
                 placeholder="MM/AAAA"
                 className="col-span-3"
                 value={newTaskCompetence}
-                onChange={(e) => setNewTaskCompetence(e.target.value)}
+                onChange={(e) => setNewTaskCompetence(maskCompetence(e.target.value))}
               />
+
             </div>
 
             <div className="grid grid-cols-4 items-center gap-4">

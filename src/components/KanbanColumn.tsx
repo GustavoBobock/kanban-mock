@@ -62,6 +62,30 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ErrorBoundary } from "./ErrorBoundary";
+
+// Helper para formatação segura de datas que evita crash
+const safeFormat = (dateStr: string | undefined | null, formatStr: string) => {
+  if (!dateStr) return "N/A";
+  try {
+    const d = parseISO(dateStr);
+    if (isNaN(d.getTime())) return "Data Inválida";
+    return format(d, formatStr, { locale: ptBR });
+  } catch (error) {
+    return "Erro Data";
+  }
+};
+
+const safeFormatDistance = (dateStr: string | undefined | null) => {
+  if (!dateStr) return "";
+  try {
+    const d = parseISO(dateStr);
+    if (isNaN(d.getTime())) return "";
+    return formatDistanceToNow(d, { locale: ptBR });
+  } catch (error) {
+    return "";
+  }
+};
 
 interface KanbanCardProps {
   task: Task;
@@ -157,37 +181,53 @@ export function KanbanCard({
 
   const getUrgencyConfig = () => {
     if (!task.due_date) return null;
-    const due = startOfDay(parseISO(task.due_date));
-    const today = startOfDay(new Date());
-    const diff = differenceInDays(due, today);
+    try {
+      const due = startOfDay(parseISO(task.due_date));
+      if (isNaN(due.getTime())) return null;
 
-    if (diff < 0) return { color: "bg-red-600", text: "VENCIDA HÁ " + Math.abs(diff) + (Math.abs(diff) === 1 ? " DIA" : " DIAS"), sub: "Atenção: obrigação em atraso! Risco de multa.", icon: <Siren className="h-4 w-4" /> };
-    if (diff === 0) return { color: "bg-orange-500", text: "VENCE HOJE", sub: "Último dia! Entregue antes das 17:30.", icon: <AlertTriangle className="h-4 w-4" /> };
-    if (diff === 1) return { color: "bg-amber-600", text: "VENCE EM 1 DIA", sub: "Prazo amanhã — priorize esta tarefa.", icon: <Timer className="h-4 w-4" /> };
-    if (diff <= 3) return { color: "bg-amber-400 text-slate-900", text: `VENCE EM ${diff} DIAS`, sub: `Atenção ao prazo — ${diff} dias restantes.`, icon: <Timer className="h-4 w-4" /> };
-    if (diff <= 7) return { color: "bg-green-500", text: `${diff} DIAS RESTANTES`, sub: `${diff} dias restantes — dentro do prazo.`, icon: <CheckCircle2 className="h-4 w-4" /> };
-    return { color: "bg-slate-400", text: `${diff} DIAS RESTANTES`, sub: `${diff} dias restantes — sem urgência.`, icon: <Calendar className="h-4 w-4" /> };
+      const today = startOfDay(new Date());
+      const diff = differenceInDays(due, today);
+
+      if (diff < 0) return { color: "bg-red-600", text: "VENCIDA HÁ " + Math.abs(diff) + (Math.abs(diff) === 1 ? " DIA" : " DIAS"), sub: "Atenção: obrigação em atraso! Risco de multa.", icon: <Siren className="h-4 w-4" /> };
+      if (diff === 0) return { color: "bg-orange-500", text: "VENCE HOJE", sub: "Último dia! Entregue antes das 17:30.", icon: <AlertTriangle className="h-4 w-4" /> };
+      if (diff === 1) return { color: "bg-amber-600", text: "VENCE EM 1 DIA", sub: "Prazo amanhã — priorize esta tarefa.", icon: <Timer className="h-4 w-4" /> };
+      if (diff <= 3) return { color: "bg-amber-400 text-slate-900", text: `VENCE EM ${diff} DIAS`, sub: `Atenção ao prazo — ${diff} dias restantes.`, icon: <Timer className="h-4 w-4" /> };
+      if (diff <= 7) return { color: "bg-green-500", text: `${diff} DIAS RESTANTES`, sub: `${diff} dias restantes — dentro do prazo.`, icon: <CheckCircle2 className="h-4 w-4" /> };
+      return { color: "bg-slate-400", text: `${diff} DIAS RESTANTES`, sub: `${diff} dias restantes — sem urgência.`, icon: <Calendar className="h-4 w-4" /> };
+    } catch (e) {
+      return null;
+    }
   };
+
 
   const getProgressBar = () => {
     if (!task.due_date || !task.created_at) return null;
-    const start = new Date(task.created_at).getTime();
-    const end = new Date(task.due_date).getTime();
-    const now = new Date().getTime();
+    try {
+      const start = new Date(task.created_at).getTime();
+      const end = new Date(task.due_date).getTime();
+      if (isNaN(start) || isNaN(end)) return null;
 
-    if (now >= end) return { value: 100, color: "bg-red-600", label: "100% — VENCIDA" };
+      const now = new Date().getTime();
 
-    const total = end - start;
-    const consumed = now - start;
-    const percent = Math.min(Math.max(Math.round((consumed / total) * 100), 0), 100);
+      if (now >= end) return { value: 100, color: "bg-red-600", label: "100% — VENCIDA" };
 
-    let color = "bg-green-500";
-    if (percent > 80) color = "bg-red-500";
-    else if (percent > 60) color = "bg-orange-500";
-    else if (percent > 40) color = "bg-amber-500";
+      const total = end - start;
+      if (total <= 0) return null;
 
-    return { value: percent, color, label: `${percent}% do prazo consumido` };
+      const consumed = now - start;
+      const percent = Math.min(Math.max(Math.round((consumed / total) * 100), 0), 100);
+
+      let color = "bg-green-500";
+      if (percent > 80) color = "bg-red-500";
+      else if (percent > 60) color = "bg-orange-500";
+      else if (percent > 40) color = "bg-amber-500";
+
+      return { value: percent, color, label: `${percent}% do prazo consumido` };
+    } catch (e) {
+      return null;
+    }
   };
+
 
   const urgency = getUrgencyConfig();
   const progress = getProgressBar();
@@ -346,7 +386,22 @@ export function KanbanCard({
                   </span>
                 )}
               </div>
+              {(task.client_cnpj || task.competence) && (
+                <div className="flex items-center gap-2 mt-1.5 opacity-80">
+                  {task.client_cnpj && (
+                    <span className="text-[9px] font-mono bg-slate-100 px-1 rounded flex items-center gap-1">
+                      <FileText className="h-2 w-2" /> {task.client_cnpj}
+                    </span>
+                  )}
+                  {task.competence && (
+                    <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 rounded">
+                      Comp: {task.competence}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
+
             <div className="flex flex-col gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
               <button
                 onClick={(e) => {
@@ -380,13 +435,14 @@ export function KanbanCard({
                       onClick={(e) => e.stopPropagation()}
                       className={cn(
                         "flex items-center gap-1 font-bold transition-colors hover:bg-slate-100 rounded px-1 -ml-1",
-                        isBefore(parseISO(task.due_date), startOfDay(new Date())) ? "text-red-600" : "text-slate-500"
+                        task.due_date && isBefore(parseISO(task.due_date), startOfDay(new Date())) ? "text-red-600" : "text-slate-500"
                       )}
                       title="Alteração rápida de data"
                     >
                       <Calendar className="h-3 w-3" />
-                      {format(parseISO(task.due_date), "dd/MM", { locale: ptBR })}
+                      {safeFormat(task.due_date, "dd/MM")}
                     </button>
+
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <CalendarComponent
@@ -422,12 +478,13 @@ export function KanbanCard({
             </div>
           </div>
         </>
-      )}
+      )
+      }
     </div>
   );
 
   return (
-    <>
+    <ErrorBoundary>
       <HoverCard openDelay={500}>
         <HoverCardTrigger asChild>
           <div>
@@ -473,9 +530,13 @@ export function KanbanCard({
                 <User className="h-3.5 w-3.5 mt-0.5 text-slate-400" />
                 <div className="flex-1">
                   <p className="text-[10px] font-bold text-slate-400 uppercase">Cliente</p>
-                  <p className="text-xs font-semibold text-slate-700">{task.client_name || "N/A"}</p>
+                  <p className="text-xs font-semibold text-slate-700">
+                    {task.client_name || "N/A"}
+                    {task.client_cnpj && <span className="block text-[10px] font-mono text-slate-500">{task.client_cnpj}</span>}
+                  </p>
                 </div>
               </div>
+
               <div className="flex items-start gap-2.5">
                 <Briefcase className="h-3.5 w-3.5 mt-0.5 text-slate-400" />
                 <div className="flex-1">
@@ -488,10 +549,12 @@ export function KanbanCard({
                 <div className="flex-1">
                   <p className="text-[10px] font-bold text-slate-400 uppercase">Vencimento</p>
                   <p className="text-xs font-semibold text-slate-700">
-                    {task.due_date ? format(parseISO(task.due_date), "dd/MM/yyyy (eeee)", { locale: ptBR }) : "N/A"}
+                    {safeFormat(task.due_date, "dd/MM/yyyy (eeee)")}
+                    {task.competence && <span className="block text-[10px] font-bold text-blue-600">Competência: {task.competence}</span>}
                   </p>
                 </div>
               </div>
+
             </div>
 
             <div className="pt-2 border-t border-slate-50">
@@ -516,7 +579,7 @@ export function KanbanCard({
                 </span>
                 {task.last_note_at && (
                   <span className="text-[9px] text-slate-400 ml-auto font-medium">
-                    há {formatDistanceToNow(parseISO(task.last_note_at), { locale: ptBR })}
+                    {safeFormatDistance(task.last_note_at) ? `há ${safeFormatDistance(task.last_note_at)}` : ""}
                   </span>
                 )}
               </div>
@@ -583,11 +646,12 @@ export function KanbanCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </ErrorBoundary>
   );
 }
 
 interface KanbanColumnProps {
+
   column: Column;
   tasks: Task[];
   colorIndex: number;

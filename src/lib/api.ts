@@ -138,17 +138,25 @@ export const api = {
 
         const safeColumns = columns || [];
         const transformedTasks = (tasks || []).map(task => {
-            const notes = (task.task_notes as any[]) || [];
-            const notesCount = (task.notes_count as any)?.[0]?.count || 0;
-            const imagesCount = notes.reduce((acc, note) => acc + (note.images?.length || 0), 0);
+            // Supabase retorna notes_count como [{count: N}] via aggregate — extrair o número
+            const rawNotesCount = (task.notes_count as any);
+            const notesCount: number = Array.isArray(rawNotesCount)
+                ? (Number(rawNotesCount[0]?.count) || 0)
+                : (Number(rawNotesCount) || 0);
 
-            const sortedNotes = [...notes].sort((a, b) =>
+            const notes = (task.task_notes as any[]) || [];
+            const imagesCount = notes.reduce((acc: number, note: any) => acc + (note.images?.length || 0), 0);
+
+            const sortedNotes = [...notes].sort((a: any, b: any) =>
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
             const lastNote = sortedNotes[0];
 
+            // Remover campos brutos do Supabase para que não vazem para o objeto Task
+            const { task_notes: _rawNotes, ...cleanTask } = task as any;
+
             return {
-                ...task,
+                ...cleanTask,
                 notes_count: notesCount,
                 images_count: imagesCount,
                 last_note_at: lastNote?.updated_at,

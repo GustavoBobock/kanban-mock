@@ -1,0 +1,2 @@
+import { Component, ReactNode } from "react";
+export class ErrorBoundary extends Component<{children: ReactNode, fallback?: ReactNode}, {hasError: boolean, error: Error | null}> { state = { hasError: false, error: null }; static getDerivedStateFromError(error: Error) { return { hasError: true, error }; } render() { if (this.state.hasError) { return <div className="p-4 bg-red-100 text-red-900 border border-red-500 rounded"><h2 className="font-bold">Error</h2><pre className="text-xs whitespace-pre-wrap">{this.state.error?.stack}</pre></div>; } return this.props.children; } }
