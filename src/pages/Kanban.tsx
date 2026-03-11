@@ -11,7 +11,7 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Plus, LayoutDashboard, Loader2, AlertCircle, Clock, CheckCircle2, Filter, Search, Users, Wand2, Calendar as CalendarIcon, X, Package } from "lucide-react";
+import { LogOut, Plus, LayoutDashboard, Loader2, AlertCircle, Clock, CheckCircle2, Filter, Search, Users, Wand2, Calendar as CalendarIcon, X, Package, ArchiveRestore, Briefcase, User, FileText } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { format, isBefore, isAfter, addDays, startOfDay, parseISO, setDate } from "date-fns";
@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
 type ViewMode = "kanban" | "list";
@@ -143,6 +144,47 @@ const Kanban = () => {
 
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [archivedCount, setArchivedCount] = useState(0);
+  const [archiveDrawerOpen, setArchiveDrawerOpen] = useState(false);
+  const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  const fetchArchivedTasks = async () => {
+    if (!user) return;
+    try {
+      setArchiveLoading(true);
+      const data = await api.getArchivedTasks(user.id);
+      setArchivedTasks(data);
+      setArchivedCount(data.length);
+    } catch {
+      toast.error("Erro ao carregar arquivo.");
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const handleOpenArchive = () => {
+    setArchiveDrawerOpen(true);
+    fetchArchivedTasks();
+  };
+
+  const handleRestoreTask = async (task: Task) => {
+    if (!board) return;
+    const firstCol = board.columns[0];
+    if (!firstCol) return;
+    try {
+      setRestoringId(task.id);
+      await api.unarchiveTask(task.id, firstCol.id);
+      toast.success(`"${task.title}" restaurada para "${firstCol.title}".`);
+      fetchArchivedTasks();
+      fetchBoard(true);
+    } catch {
+      toast.error("Erro ao restaurar tarefa.");
+    } finally {
+      setRestoringId(null);
+    }
+  };
   const [inlineColTitle, setInlineColTitle] = useState("");
 
   // Memoized KPIs
@@ -434,10 +476,27 @@ const Kanban = () => {
       });
 
       try {
-        await api.moveTask(taskId, toColId, newPosition);
-        // Refresh silencioso: a atualização otimista já atualizou a UI corretamente.
-        // Usar silent=true para NÃO disparar setLoading(true), que causava tela branca.
-        fetchBoard(true);
+        const toCol = board.columns.find(c => c.id === toColId);
+        const isEntregue = toCol?.title.toLowerCase() === "entregue" || toCol?.title.toLowerCase() === "concluído";
+        if (isEntregue) {
+          await api.archiveTask(taskId, "Concluído");
+          setArchivedCount(prev => prev + 1);
+          setBoard(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              tasks: prev.tasks.filter(t => t.id !== taskId),
+              columns: prev.columns.map(c => ({
+                ...c,
+                taskIds: c.taskIds.filter(id => id !== taskId)
+              }))
+            };
+          });
+          toast.success("Tarefa concluída e arquivada! 📦");
+        } else {
+          await api.moveTask(taskId, toColId, newPosition);
+          fetchBoard(true);
+        }
       } catch (error) {
         console.error("Erro exato ao mover tarefa no Supabase:", error);
         toast.error("Erro ao mover tarefa. Tente novamente.");
@@ -565,11 +624,9 @@ const Kanban = () => {
 
           <ClientSidebar clients={clients} />
 
-          <Button variant="outline" size="sm" asChild className="bg-white/10 text-white hover:bg-white/20 border-white/20">
-            <Link to="/arquivo">
-              <Package className="mr-2 h-4 w-4" />
-              Arquivo
-            </Link>
+          <Button variant="outline" size="sm" onClick={handleOpenArchive} className="bg-white/10 text-white hover:bg-white/20 border-white/20">
+            <Package className="mr-2 h-4 w-4" />
+            Arquivo {archivedCount > 0 && <span className="ml-1 bg-white/20 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{archivedCount}</span>}
           </Button>
 
           <Button
@@ -828,18 +885,103 @@ const Kanban = () => {
       {/* Footer Indicator */}
       <footer className="bg-white/80 border-t border-border/40 px-6 py-2 flex justify-between items-center text-xs text-muted-foreground shadow-inner">
         <div className="flex items-center gap-4">
-          <Link
-            to="/arquivo"
+          <button
+            onClick={handleOpenArchive}
             className="flex items-center gap-1.5 hover:text-primary transition-colors font-medium bg-slate-100 px-2 py-1 rounded"
           >
             <Package className="h-3.5 w-3.5" />
             <span>{archivedCount} tarefas arquivadas — Ver arquivo</span>
-          </Link>
+          </button>
         </div>
         <div>
           {board?.tasks.length || 0} tarefas ativas no quadro
         </div>
       </footer>
+
+      <Sheet open={archiveDrawerOpen} onOpenChange={setArchiveDrawerOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
+          <SheetHeader className="px-6 py-4 border-b bg-slate-50">
+            <SheetTitle className="flex items-center gap-2 text-slate-800">
+              <Package className="h-5 w-5" />
+              Arquivo de Tarefas
+              <span className="ml-auto text-sm font-normal text-slate-500">{archivedTasks.length} tarefa{archivedTasks.length !== 1 ? "s" : ""}</span>
+            </SheetTitle>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Buscar por nome, cliente, CNPJ ou data..."
+                className="pl-10 bg-white"
+                value={archiveSearch}
+                onChange={(e) => setArchiveSearch(e.target.value)}
+              />
+            </div>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+            {archiveLoading ? (
+              <div className="flex justify-center py-20">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : (() => {
+              const q = archiveSearch.toLowerCase();
+              const filtered = archivedTasks.filter(t =>
+                t.title?.toLowerCase().includes(q) ||
+                t.client_name?.toLowerCase().includes(q) ||
+                t.client_cnpj?.toLowerCase().includes(q) ||
+                t.obligation_type?.toLowerCase().includes(q) ||
+                (t.archived_at && format(parseISO(t.archived_at), "dd/MM/yyyy").includes(q))
+              );
+              if (filtered.length === 0) return (
+                <div className="text-center py-20 text-slate-400">
+                  <p className="text-4xl mb-3">📭</p>
+                  <p className="font-semibold text-slate-500">{archiveSearch ? "Nenhum resultado." : "Nenhuma tarefa arquivada."}</p>
+                  <p className="text-xs mt-1">Arraste tarefas para "Entregue" para arquivar.</p>
+                </div>
+              );
+              const priorityColor: Record<string, string> = {
+                Urgente: "bg-red-100 text-red-700",
+                Alta: "bg-orange-100 text-orange-700",
+                Média: "bg-slate-100 text-slate-600",
+                Baixa: "bg-green-100 text-green-700",
+              };
+              return filtered.map(task => (
+                <div key={task.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-start gap-3 hover:shadow-md transition-shadow">
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-slate-800 text-sm">{task.title}</span>
+                      {task.priority && (
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${priorityColor[task.priority] || priorityColor["Média"]}`}>
+                          {task.priority}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+                      {task.client_name && <span className="flex items-center gap-1"><User className="h-3 w-3" />{task.client_name}</span>}
+                      {task.client_cnpj && <span className="flex items-center gap-1 font-mono"><FileText className="h-3 w-3" />{task.client_cnpj}</span>}
+                      {task.obligation_type && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{task.obligation_type}</span>}
+                      {task.due_date && <span className="flex items-center gap-1"><CalendarIcon className="h-3 w-3" />Venc: {format(parseISO(task.due_date), "dd/MM/yyyy")}</span>}
+                      {task.competence && <span className="font-bold text-blue-600">Comp: {task.competence}</span>}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      Arquivado em {task.archived_at ? format(parseISO(task.archived_at), "dd/MM/yyyy 'às' HH:mm") : "—"}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 gap-1.5 text-xs border-slate-200 hover:border-primary hover:text-primary"
+                    onClick={() => handleRestoreTask(task)}
+                    disabled={restoringId === task.id}
+                  >
+                    <ArchiveRestore className="h-3.5 w-3.5" />
+                    {restoringId === task.id ? "..." : "Restaurar"}
+                  </Button>
+                </div>
+              ));
+            })()}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
