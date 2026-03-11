@@ -31,6 +31,8 @@ export interface Task {
     last_note_content?: string;
     last_note_image?: string;
     created_at: string;
+    archived_at?: string | null;
+    archived_reason?: string;
 }
 
 export interface Column {
@@ -132,6 +134,7 @@ export const api = {
                 task_notes(updated_at, images, content)
             `)
             .in("column_id", columns.map(c => c.id))
+            .is("archived_at", null)
             .order("position");
 
         if (tasksError) throw tasksError;
@@ -401,5 +404,57 @@ export const api = {
             .getPublicUrl(filePath);
 
         return data.publicUrl;
+    },
+
+    archiveTask: async (taskId: string, reason: string) => {
+        const { error } = await supabase
+            .from("tasks")
+            .update({
+                archived_at: new Date().toISOString(),
+                archived_reason: reason
+            })
+            .eq("id", taskId);
+        if (error) throw error;
+    },
+
+    unarchiveTask: async (taskId: string, columnId: string) => {
+        const { error } = await supabase
+            .from("tasks")
+            .update({
+                archived_at: null,
+                archived_reason: null,
+                column_id: columnId
+            })
+            .eq("id", taskId);
+        if (error) throw error;
+    },
+
+    getArchivedTasks: async (userId: string): Promise<Task[]> => {
+        const { data: boards } = await supabase.from("boards").select("id").eq("user_id", userId).limit(1);
+        if (!boards || boards.length === 0) return [];
+
+        const { data: columns } = await supabase.from("columns").select("id").eq("board_id", boards[0].id);
+        if (!columns || columns.length === 0) return [];
+
+        const { data: tasks, error } = await supabase
+            .from("tasks")
+            .select(`
+                *,
+                notes_count:task_notes(count)
+            `)
+            .in("column_id", columns.map(c => c.id))
+            .not("archived_at", "is", null)
+            .order("archived_at", { ascending: false });
+
+        if (error) throw error;
+
+        return (tasks || []).map(task => {
+            const rawNotesCount = (task.notes_count as any);
+            const notesCount: number = Array.isArray(rawNotesCount)
+                ? (Number(rawNotesCount[0]?.count) || 0)
+                : (Number(rawNotesCount) || 0);
+
+            return { ...task, notes_count: notesCount };
+        });
     }
 };

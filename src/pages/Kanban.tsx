@@ -11,7 +11,7 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Plus, LayoutDashboard, Loader2, AlertCircle, Clock, CheckCircle2, Filter, Search, Users, Wand2, Calendar as CalendarIcon, X } from "lucide-react";
+import { LogOut, Plus, LayoutDashboard, Loader2, AlertCircle, Clock, CheckCircle2, Filter, Search, Users, Wand2, Calendar as CalendarIcon, X, Package } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { format, isBefore, isAfter, addDays, startOfDay, parseISO, setDate } from "date-fns";
@@ -80,6 +80,10 @@ const Kanban = () => {
       } else {
         setBoard(data);
       }
+
+      // Buscar contagem de arquivadas
+      const archived = await api.getArchivedTasks(user.id);
+      setArchivedCount(archived.length);
     } catch (error) {
       console.error("Error fetching board:", error);
       if (!silent) toast.error("Erro ao carregar o quadro.");
@@ -138,6 +142,7 @@ const Kanban = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const [isAddingColumn, setIsAddingColumn] = useState(false);
+  const [archivedCount, setArchivedCount] = useState(0);
   const [inlineColTitle, setInlineColTitle] = useState("");
 
   // Memoized KPIs
@@ -560,6 +565,13 @@ const Kanban = () => {
 
           <ClientSidebar clients={clients} />
 
+          <Button variant="outline" size="sm" asChild className="bg-white/10 text-white hover:bg-white/20 border-white/20">
+            <Link to="/arquivo">
+              <Package className="mr-2 h-4 w-4" />
+              Arquivo
+            </Link>
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -812,6 +824,22 @@ const Kanban = () => {
           onSuccess={() => fetchBoard(true)}
         />
       )}
+
+      {/* Footer Indicator */}
+      <footer className="bg-white/80 border-t border-border/40 px-6 py-2 flex justify-between items-center text-xs text-muted-foreground shadow-inner">
+        <div className="flex items-center gap-4">
+          <Link
+            to="/arquivo"
+            className="flex items-center gap-1.5 hover:text-primary transition-colors font-medium bg-slate-100 px-2 py-1 rounded"
+          >
+            <Package className="h-3.5 w-3.5" />
+            <span>{archivedCount} tarefas arquivadas — Ver arquivo</span>
+          </Link>
+        </div>
+        <div>
+          {board?.tasks.length || 0} tarefas ativas no quadro
+        </div>
+      </footer>
     </div>
   );
 };
