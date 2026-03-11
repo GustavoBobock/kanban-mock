@@ -569,6 +569,20 @@ const Kanban = () => {
     return <div className="flex h-screen items-center justify-center">Erro ao carregar quadro.</div>;
   }
 
+  const urgencyScore = (task: Task): number => {
+    const priorityBonus: Record<string, number> = {
+      Urgente: -0.4, Alta: -0.2, Média: 0, Baixa: 0.2,
+    };
+    const bonus = priorityBonus[task.priority || "Média"] ?? 0;
+    if (!task.due_date) return 999 + bonus;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(task.due_date);
+    due.setHours(0, 0, 0, 0);
+    const diff = Math.floor((due.getTime() - today.getTime()) / 86400000);
+    return diff + bonus;
+  };
+
   return (
     <div className="flex h-screen flex-col bg-kanban-bg">
       {/* Top bar */}
@@ -741,9 +755,10 @@ const Kanban = () => {
         viewMode === "kanban" ? (
           <main className="flex flex-1 gap-4 overflow-x-auto p-4 kanban-scrollbar">
             {filteredBoard.columns.map((col, idx) => {
-              const columnTasks = col.taskIds
+              const columnTasks = (col.taskIds
                 .map((id) => filteredBoard.tasks.find((t) => t.id === id))
-                .filter(Boolean) as Task[];
+                .filter(Boolean) as Task[])
+                .sort((a, b) => urgencyScore(a) - urgencyScore(b));
 
               return (
                 <KanbanColumn
