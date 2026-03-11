@@ -135,7 +135,14 @@ export function NewTaskModal({ isOpen, onOpenChange, board, clients, onSuccess }
 
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">Cliente Fixo</Label>
-                        <Select value={newTaskClientId} onValueChange={setNewTaskClientId}>
+                        <Select
+                            value={newTaskClientId}
+                            onValueChange={(val) => {
+                                setNewTaskClientId(val);
+                                const found = clients.find(c => c.id === val);
+                                setNewTaskCnpj(found?.cnpj ?? "");
+                            }}
+                        >
                             <SelectTrigger className="col-span-3">
                                 <SelectValue placeholder="Opcional: selecionar do CRM..." />
                             </SelectTrigger>
@@ -159,7 +166,7 @@ export function NewTaskModal({ isOpen, onOpenChange, board, clients, onSuccess }
                     </div>
 
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="task-cnpj" className="text-right">CNPJ</Label>
+                        <Label htmlFor="task-cnpj" className="text-right">CNPJ / CPF</Label>
                         <Input
                             id="task-cnpj"
                             className="col-span-3"

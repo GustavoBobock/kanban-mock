@@ -56,6 +56,39 @@ const OBLIGATION_METADATA: ObligationInfo[] = [
     { id: "Simples Nacional", label: "DAS Anual", vencimento: "Março", periodicidade: 'anual', suggestedRegimes: ['Simples Nacional', 'MEI'] },
 ];
 
+// ── Máscaras ──────────────────────────────────────
+function maskCnpjCpf(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 14);
+    if (digits.length <= 11) {
+        // CPF: 000.000.000-00
+        return digits
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    }
+    // CNPJ: 00.000.000/0000-00
+    return digits
+        .replace(/(\d{2})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1/$2')
+        .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+}
+
+function maskPhone(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 10) {
+        // Fixo: (00) 0000-0000
+        return digits
+            .replace(/(\d{2})(\d)/, '($1) $2')
+            .replace(/(\d{4})(\d{1,4})$/, '$1-$2');
+    }
+    // Celular: (00) 00000-0000
+    return digits
+        .replace(/(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+}
+// ─────────────────────────────────────────────────
+
 const Clientes = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -349,7 +382,7 @@ const Clientes = () => {
                             </div>
                             <div className="space-y-2 col-span-1">
                                 <Label htmlFor="cnpj">CNPJ / CPF</Label>
-                                <Input id="cnpj" value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+                                <Input id="cnpj" value={cnpj} onChange={(e) => setCnpj(maskCnpjCpf(e.target.value))} placeholder="00.000.000/0000-00 ou 000.000.000-00" maxLength={18} />
                             </div>
                         </div>
 
@@ -382,7 +415,7 @@ const Clientes = () => {
                             </div>
                             <div className="space-y-2 col-span-1">
                                 <Label htmlFor="phone">Telefone</Label>
-                                <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                                <Input id="phone" value={phone} onChange={(e) => setPhone(maskPhone(e.target.value))} placeholder="(00) 00000-0000" maxLength={15} />
                             </div>
                         </div>
 
